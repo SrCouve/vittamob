@@ -506,13 +506,35 @@ export default function LoginScreen() {
         return;
       }
 
-      const { error } = await supabase.auth.signInWithIdToken({
+      // Apple only sends the name on FIRST sign-in, save it immediately
+      const fullName = [credential.fullName?.givenName, credential.fullName?.familyName]
+        .filter(Boolean)
+        .join(' ');
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
       });
 
       if (error) {
         setErrorMsg(error.message);
+        return;
+      }
+
+      // Create/update profile with Apple name if available
+      if (data.user && fullName) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          name: fullName,
+          points_balance: 100,
+        }, { onConflict: 'id', ignoreDuplicates: false });
+      } else if (data.user) {
+        // Ensure profile exists even without name
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          name: data.user.email?.split('@')[0] ?? 'Usuário',
+          points_balance: 100,
+        }, { onConflict: 'id', ignoreDuplicates: true });
       }
     } catch (e: any) {
       if (e.code !== 'ERR_REQUEST_CANCELED') {

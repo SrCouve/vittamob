@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Circle, Polyline, Line } from 'react-native-svg';
+import { router } from 'expo-router';
 import { GlassCard } from '../../src/components/GlassCard';
 import { Logo } from '../../src/components/Logo';
 import { FONTS } from '../../src/constants/theme';
@@ -125,8 +126,14 @@ export default function PerfilScreen() {
       {/* Avatar & Info */}
       <Animated.View entering={FadeInDown.delay(50).duration(500)} style={styles.avatarSection}>
         <View style={styles.avatarWrap}>
-          <LinearGradient colors={['#FF6C24', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-          <Text style={styles.avatarText}>{initial}</Text>
+          {profile?.avatar_url ? (
+            <Image source={{ uri: profile.avatar_url }} style={{ width: 96, height: 96, borderRadius: 48 }} />
+          ) : (
+            <>
+              <LinearGradient colors={['#FF6C24', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+              <Text style={styles.avatarText}>{initial}</Text>
+            </>
+          )}
         </View>
         <Text style={styles.userName}>{displayName}</Text>
         {joinDate ? <Text style={styles.userSince}>Membro desde {joinDate}</Text> : null}
@@ -177,6 +184,9 @@ export default function PerfilScreen() {
               key={item}
               activeOpacity={0.7}
               style={[styles.menuItem, i < menuItems.length - 1 && styles.menuItemBorder]}
+              onPress={() => {
+                if (item === 'Editar perfil') router.push('/(tabs)/editar-perfil' as any);
+              }}
             >
               <Text style={styles.menuItemText}>{item}</Text>
               <ChevronRight />
