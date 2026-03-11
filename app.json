@@ -38,6 +38,13 @@
       "expo-font",
       "expo-router",
       "expo-splash-screen"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "af4b0142-d6fb-4393-a5db-b9b591984053"
+      }
+    },
+    "owner": "firezy"
   }
 }
