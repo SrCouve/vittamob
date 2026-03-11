@@ -194,9 +194,13 @@ export function BottomNav() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
-  const activeIndex = tabs.findIndex((tab) =>
-    tab.href === '/(tabs)' ? pathname === '/' || pathname === '/(tabs)' : pathname.startsWith(tab.href.replace('/(tabs)', ''))
-  );
+  const activeIndex = tabs.findIndex((tab) => {
+    if (tab.href === '/(tabs)') {
+      return pathname === '/' || pathname === '/(tabs)';
+    }
+    const base = tab.href.replace('/(tabs)', '');
+    return pathname === base || pathname.startsWith(base + '/');
+  });
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom + 8 }]}>

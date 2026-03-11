@@ -6,8 +6,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Polygon, Circle, Polyline } from 'react-native-svg';
-import { GlassCard } from '../../src/components/GlassCard';
-import { FONTS } from '../../src/constants/theme';
+import { GlassCard } from '../../../src/components/GlassCard';
+import { FONTS } from '../../../src/constants/theme';
 
 function PlayIcon({ size = 14, color = '#FF6C24' }: { size?: number; color?: string }) {
   return (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Dimensions, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -23,8 +23,7 @@ const webHeroGlass = isWeb ? {
   WebkitBackdropFilter: 'blur(20px) saturate(180%)',
   boxShadow: '0 20px 50px -12px rgba(255,108,36,0.15), 0 8px 24px rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,200,170,0.12)',
 } as any : {};
-const webOrbBlur = isWeb ? { filter: 'blur(60px)' } as any : {};
-const webQuoteOrbBlur = isWeb ? { filter: 'blur(60px)' } as any : {};
+// filter is applied via useEffect (react-native-web strips it from styles)
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -69,8 +68,25 @@ function ChevronRight({ size = 14 }: { size?: number }) {
   );
 }
 
+function useWebFilter(ref: React.RefObject<any>, blur: string) {
+  useEffect(() => {
+    if (!isWeb) return;
+    requestAnimationFrame(() => {
+      const node = ref.current as any;
+      if (node) {
+        const el = node instanceof HTMLElement ? node : node;
+        if (el && el.style) el.style.filter = blur;
+      }
+    });
+  }, []);
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const heroOrbRef = useRef<any>(null);
+  const quoteOrbRef = useRef<any>(null);
+  useWebFilter(heroOrbRef, 'blur(60px)');
+  useWebFilter(quoteOrbRef, 'blur(60px)');
 
   return (
     <ScrollView
@@ -92,7 +108,7 @@ export default function HomeScreen() {
 
       {/* ══ CONTINUE WATCHING ══ */}
       <Animated.View entering={FadeInDown.delay(50).duration(500)}>
-        <TouchableOpacity activeOpacity={0.8} style={[styles.heroCard, webHeroGlass]}>
+        <TouchableOpacity activeOpacity={0.8} style={[styles.heroCard, webHeroGlass]} onPress={() => router.push('/aulas/1' as any)}>
           <LinearGradient
             colors={['rgba(255,108,36,0.12)', 'rgba(255,133,64,0.06)', 'rgba(255,172,125,0.08)']}
             start={{ x: 0, y: 0 }}
@@ -108,7 +124,7 @@ export default function HomeScreen() {
             style={styles.heroSpecular}
           />
           {/* Warm orb */}
-          <View style={[styles.heroOrb, webOrbBlur]} />
+          <View ref={heroOrbRef} style={styles.heroOrb} />
 
           <View style={styles.heroContent}>
             {/* Progress Ring */}
@@ -175,7 +191,7 @@ export default function HomeScreen() {
           <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0.08)']} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.statSpecular} />
           <View style={styles.statLottieClip}>
-            <LottieView source={require('../../assets/presentation-emoji.json')} autoPlay loop style={{ width: 64, height: 64 }} />
+            <LottieView source={require('../../assets/presentation-emoji.json')} autoPlay loop style={{ width: 80, height: 80 }} />
           </View>
           <Text style={styles.statValue}>23</Text>
           <Text style={styles.statLabel}>Aulas</Text>
@@ -186,7 +202,7 @@ export default function HomeScreen() {
           <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0.08)']} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.statSpecular} />
           <View style={styles.statLottieClip}>
-            <LottieView source={require('../../assets/award-emoji.json')} autoPlay loop style={{ width: 64, height: 64 }} />
+            <LottieView source={require('../../assets/award-emoji.json')} autoPlay loop style={{ width: 80, height: 80 }} />
           </View>
           <Text style={styles.statValue}>1.2k</Text>
           <Text style={styles.statLabel}>XP</Text>
@@ -246,7 +262,7 @@ export default function HomeScreen() {
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <View style={[styles.quoteOrb, webQuoteOrbBlur]} />
+        <View ref={quoteOrbRef} style={styles.quoteOrb} />
         <Text style={styles.quoteText}>{"\u201C"}O corpo alcança o que a mente acredita.{"\u201D"}</Text>
         <Text style={styles.quoteLabel}>FRASE DO DIA</Text>
       </Animated.View>
@@ -364,7 +380,7 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', paddingVertical: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 32 },
   statSpecular: { position: 'absolute', top: 0, left: '10%', right: '10%', height: 1, zIndex: 1 },
   statLottie: { width: 36, height: 36, zIndex: 2 },
-  statLottieClip: { width: 36, height: 36, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  statLottieClip: { width: 48, height: 48, marginVertical: -6, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
   statValue: { fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 14, marginTop: 6, zIndex: 2 },
   statLabel: { fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 2, zIndex: 2 },
 

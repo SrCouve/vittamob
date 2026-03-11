@@ -30,7 +30,7 @@ export function Logo({ size = 'md', variant = 'gradient' }: LogoProps) {
     return (
       <View style={styles.row}>
         <Text style={[styles.vitta, { fontSize }, gradientStyle]}>VITTA</Text>
-        <Text style={[styles.up, { fontSize }, gradientStyle]}> UP</Text>
+        <Text style={[styles.up, { fontSize, color: '#FFFFFF' }]}> UP</Text>
       </View>
     );
   }
@@ -40,7 +40,7 @@ export function Logo({ size = 'md', variant = 'gradient' }: LogoProps) {
     return (
       <View style={styles.row}>
         <Text style={[styles.vitta, { fontSize, color: '#FF6C24' }]}>VITTA</Text>
-        <Text style={[styles.up, { fontSize, color: '#FFAC7D' }]}> UP</Text>
+        <Text style={[styles.up, { fontSize, color: '#FFFFFF' }]}> UP</Text>
       </View>
     );
   }

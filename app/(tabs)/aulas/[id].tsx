@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Image, Dimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, Image, Dimensions, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { router, useLocalSearchParams } from 'expo-router';
+
+const isWeb = Platform.OS === 'web';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Polygon, Circle, Polyline } from 'react-native-svg';
-import { GlassCard } from '../../src/components/GlassCard';
-import { FONTS } from '../../src/constants/theme';
+import { GlassCard } from '../../../src/components/GlassCard';
+import { FONTS } from '../../../src/constants/theme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -97,8 +99,8 @@ export default function AulaDetailScreen() {
         <View style={styles.videoOverlay} />
 
         {/* Play button */}
-        <TouchableOpacity style={styles.playBtnLarge} activeOpacity={0.8}>
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+        <TouchableOpacity style={[styles.playBtnLarge, isWeb ? { backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' } as any : {}]} activeOpacity={0.8}>
+          {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
           <Svg width={24} height={24} viewBox="0 0 24 24" fill="#fff">
             <Polygon points="5 3 19 12 5 21 5 3" />
           </Svg>
@@ -107,10 +109,10 @@ export default function AulaDetailScreen() {
         {/* Back button */}
         <TouchableOpacity
           onPress={() => router.back()}
-          style={[styles.backBtn, { top: insets.top + 8 }]}
+          style={[styles.backBtn, { top: insets.top + 8 }, isWeb ? { backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' } as any : {}]}
           activeOpacity={0.7}
         >
-          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+          {!isWeb && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
           <ArrowLeftIcon />
         </TouchableOpacity>
       </View>

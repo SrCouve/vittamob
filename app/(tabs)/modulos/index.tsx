@@ -5,8 +5,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Rect, Circle, Polyline, Line } from 'react-native-svg';
-import { GlassCard } from '../../src/components/GlassCard';
-import { FONTS } from '../../src/constants/theme';
+import { GlassCard } from '../../../src/components/GlassCard';
+import { FONTS } from '../../../src/constants/theme';
 
 // Icons matching web Lucide icons
 function DumbbellIcon({ size = 22 }: { size?: number }) {

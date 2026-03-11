@@ -21,8 +21,6 @@ import {
 } from '@expo-google-fonts/playfair-display';
 import { BackgroundOrbs } from '../src/components/BackgroundOrbs';
 
-const isWeb = Platform.OS === 'web';
-
 SplashScreen.preventAutoHideAsync();
 
 const VittaTheme = {
@@ -61,17 +59,14 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={VittaTheme}>
-      <View style={[styles.container, isWeb ? styles.containerWeb as any : null]}>
-        {/* Native: LinearGradient for background. Web: CSS handles it via +html.tsx */}
-        {!isWeb && (
-          <LinearGradient
-            colors={['#0D0D0D', '#1A1008', '#181010', '#0D0D0D']}
-            locations={[0, 0.4, 0.7, 1.0]}
-            start={{ x: 0.3, y: 0 }}
-            end={{ x: 0.7, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        )}
+      <View style={styles.container}>
+        <LinearGradient
+          colors={['#0D0D0D', '#1A1008', '#181010', '#0D0D0D']}
+          locations={[0, 0.4, 0.7, 1.0]}
+          start={{ x: 0.3, y: 0 }}
+          end={{ x: 0.7, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
         <BackgroundOrbs />
         <StatusBar style="light" translucent backgroundColor="transparent" />
         <Stack
@@ -89,8 +84,5 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  containerWeb: {
-    backgroundColor: 'transparent',
   },
 });

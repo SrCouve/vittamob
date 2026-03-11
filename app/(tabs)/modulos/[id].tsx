@@ -6,8 +6,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Circle, Polyline, Polygon, Line } from 'react-native-svg';
-import { GlassCard } from '../../src/components/GlassCard';
-import { FONTS } from '../../src/constants/theme';
+import { GlassCard } from '../../../src/components/GlassCard';
+import { FONTS } from '../../../src/constants/theme';
 
 function ArrowLeftIcon({ size = 18 }: { size?: number }) {
   return (
@@ -117,7 +117,7 @@ export default function ModuleDetailScreen() {
 
       {/* CTA Button */}
       <Animated.View entering={FadeInDown.delay(100).duration(500)}>
-        <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.8} onPress={() => router.push('/aulas/1' as any)}>
           <LinearGradient
             colors={['#FF6C24', '#FF8540']}
             start={{ x: 0, y: 0 }}
