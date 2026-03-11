@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image, Dimensions, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -6,8 +6,9 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle as SvgCircle, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { Logo } from '../../src/components/Logo';
+import { useScrollY } from '../../src/context/ScrollContext';
 import { GlassCard } from '../../src/components/GlassCard';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import Svg2, { Path, Polyline, Polygon } from 'react-native-svg';
@@ -23,7 +24,6 @@ const webHeroGlass = isWeb ? {
   WebkitBackdropFilter: 'blur(20px) saturate(180%)',
   boxShadow: '0 20px 50px -12px rgba(255,108,36,0.15), 0 8px 24px rgba(0,0,0,0.2), inset 0 1px 1px rgba(255,200,170,0.12)',
 } as any : {};
-// filter is applied via useEffect (react-native-web strips it from styles)
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -68,31 +68,23 @@ function ChevronRight({ size = 14 }: { size?: number }) {
   );
 }
 
-function useWebFilter(ref: React.RefObject<any>, blur: string) {
-  useEffect(() => {
-    if (!isWeb) return;
-    requestAnimationFrame(() => {
-      const node = ref.current as any;
-      if (node) {
-        const el = node instanceof HTMLElement ? node : node;
-        if (el && el.style) el.style.filter = blur;
-      }
-    });
-  }, []);
-}
-
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const heroOrbRef = useRef<any>(null);
-  const quoteOrbRef = useRef<any>(null);
-  useWebFilter(heroOrbRef, 'blur(60px)');
-  useWebFilter(quoteOrbRef, 'blur(60px)');
+  const scrollY = useScrollY();
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
 
   return (
-    <ScrollView
+    <Animated.ScrollView
       style={styles.scroll}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: 120 }]}
       showsVerticalScrollIndicator={false}
+      onScroll={scrollHandler}
+      scrollEventThrottle={16}
     >
       {/* ══ HEADER ══ */}
       <Animated.View entering={FadeInDown.duration(500)} style={styles.header}>
@@ -123,9 +115,6 @@ export default function HomeScreen() {
             end={{ x: 1, y: 0 }}
             style={styles.heroSpecular}
           />
-          {/* Warm orb */}
-          <View ref={heroOrbRef} style={styles.heroOrb} />
-
           <View style={styles.heroContent}>
             {/* Progress Ring */}
             <View style={styles.progressRing}>
@@ -262,7 +251,6 @@ export default function HomeScreen() {
           end={{ x: 1, y: 1 }}
           style={StyleSheet.absoluteFill}
         />
-        <View ref={quoteOrbRef} style={styles.quoteOrb} />
         <Text style={styles.quoteText}>{"\u201C"}O corpo alcança o que a mente acredita.{"\u201D"}</Text>
         <Text style={styles.quoteLabel}>FRASE DO DIA</Text>
       </Animated.View>
@@ -345,7 +333,7 @@ export default function HomeScreen() {
           ))}
         </GlassCard>
       </Animated.View>
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 
@@ -362,7 +350,6 @@ const styles = StyleSheet.create({
   // Hero card
   heroCard: { borderRadius: 24, overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(255,140,100,0.2)', marginBottom: 24, padding: 20, shadowColor: '#FF6C24', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.15, shadowRadius: 25 },
   heroSpecular: { position: 'absolute', top: 0, left: '8%', right: '8%', height: 1, zIndex: 5 },
-  heroOrb: { position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(255,108,36,0.1)' },
   heroContent: { flexDirection: 'row', alignItems: 'center', gap: 20, zIndex: 2 },
   progressRing: { width: 72, height: 72, justifyContent: 'center', alignItems: 'center' },
   progressPlayIcon: { position: 'absolute' },
@@ -407,16 +394,7 @@ const styles = StyleSheet.create({
 
   // Quote
   quoteCard: { borderRadius: 24, overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.12)', padding: 24, alignItems: 'center', marginTop: 16, marginBottom: 32 },
-  quoteOrb: {
-    position: 'absolute',
-    top: -64,
-    alignSelf: 'center',
-    width: isWeb ? 192 : 400,
-    height: isWeb ? 192 : 400,
-    borderRadius: isWeb ? 96 : 200,
-    backgroundColor: isWeb ? 'rgba(255,108,36,0.06)' : 'rgba(255,108,36,0.025)',
-  },
-  quoteText: { fontFamily: FONTS.playfair.regular, color: 'rgba(255,255,255,0.9)', fontSize: 18, fontStyle: 'italic', textAlign: 'center', lineHeight: 28, zIndex: 1 },
+  quoteText: { fontFamily: FONTS.playfair.regular, color: 'rgba(255,255,255,0.9)', fontSize: 15, fontStyle: 'italic', textAlign: 'center', lineHeight: 22, zIndex: 1 },
   quoteLabel: { fontFamily: FONTS.montserrat.medium, color: 'rgba(255,172,125,0.6)', fontSize: 11, marginTop: 12, letterSpacing: 1.5, zIndex: 1 },
 
   // Popular
