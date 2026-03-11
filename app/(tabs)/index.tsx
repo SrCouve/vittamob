@@ -191,7 +191,7 @@ export default function HomeScreen() {
           <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0.08)']} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.statSpecular} />
           <View style={styles.statLottieClip}>
-            <LottieView source={require('../../assets/presentation-emoji.json')} autoPlay loop style={{ width: 80, height: 80 }} />
+            <LottieView source={require('../../assets/presentation-emoji.json')} autoPlay loop style={{ width: isWeb ? 80 : 56, height: isWeb ? 80 : 56 }} />
           </View>
           <Text style={styles.statValue}>23</Text>
           <Text style={styles.statLabel}>Aulas</Text>
@@ -202,7 +202,7 @@ export default function HomeScreen() {
           <LinearGradient colors={['rgba(255,255,255,0.12)', 'rgba(255,255,255,0.06)', 'rgba(255,255,255,0.08)']} style={StyleSheet.absoluteFill} />
           <LinearGradient colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.statSpecular} />
           <View style={styles.statLottieClip}>
-            <LottieView source={require('../../assets/award-emoji.json')} autoPlay loop style={{ width: 80, height: 80 }} />
+            <LottieView source={require('../../assets/award-emoji.json')} autoPlay loop style={{ width: isWeb ? 80 : 56, height: isWeb ? 80 : 56 }} />
           </View>
           <Text style={styles.statValue}>1.2k</Text>
           <Text style={styles.statLabel}>XP</Text>
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', paddingVertical: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 32 },
   statSpecular: { position: 'absolute', top: 0, left: '10%', right: '10%', height: 1, zIndex: 1 },
   statLottie: { width: 36, height: 36, zIndex: 2 },
-  statLottieClip: { width: 48, height: 48, marginVertical: -6, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  statLottieClip: { width: isWeb ? 48 : 40, height: isWeb ? 48 : 40, marginVertical: isWeb ? -6 : -2, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
   statValue: { fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 14, marginTop: 6, zIndex: 2 },
   statLabel: { fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 2, zIndex: 2 },
 
