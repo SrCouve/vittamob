@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -7,6 +7,9 @@ import Svg, { Path, Circle, Polyline, Line } from 'react-native-svg';
 import { GlassCard } from '../../src/components/GlassCard';
 import { Logo } from '../../src/components/Logo';
 import { FONTS } from '../../src/constants/theme';
+import { useAuthStore } from '../../src/stores/authStore';
+import { useUserStore } from '../../src/stores/userStore';
+import { usePointsStore } from '../../src/stores/pointsStore';
 
 // Icons
 function SettingsIcon({ size = 20 }: { size?: number }) {
@@ -63,12 +66,6 @@ function ChevronRight({ size = 16 }: { size?: number }) {
   );
 }
 
-const stats = [
-  { label: 'Aulas', value: '24', Icon: BookOpenIcon },
-  { label: 'Horas', value: '12.5', Icon: ClockIcon },
-  { label: 'Streak', value: '7 dias', Icon: AwardIcon },
-];
-
 const menuItems = [
   'Editar perfil',
   'Notificações',
@@ -79,6 +76,37 @@ const menuItems = [
 
 export default function PerfilScreen() {
   const insets = useSafeAreaInsets();
+  const { signOut } = useAuthStore();
+  const { profile } = useUserStore();
+  const { balance } = usePointsStore();
+
+  const displayName = profile?.name ?? 'Usuário';
+  const initial = displayName.charAt(0).toUpperCase();
+  const totalLessons = profile?.total_lessons?.toString() ?? '0';
+  const totalHours = profile?.total_hours?.toString() ?? '0';
+  const streakDays = profile?.streak_days ? `${profile.streak_days} dias` : '0';
+
+  const stats = [
+    { label: 'Aulas', value: totalLessons, Icon: BookOpenIcon },
+    { label: 'Horas', value: totalHours, Icon: ClockIcon },
+    { label: 'Streak', value: streakDays, Icon: AwardIcon },
+  ];
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Sair da conta',
+      'Tem certeza que deseja sair?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Sair', style: 'destructive', onPress: () => signOut() },
+      ]
+    );
+  };
+
+  // Format join date
+  const joinDate = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+    : '';
 
   return (
     <ScrollView
@@ -98,10 +126,15 @@ export default function PerfilScreen() {
       <Animated.View entering={FadeInDown.delay(50).duration(500)} style={styles.avatarSection}>
         <View style={styles.avatarWrap}>
           <LinearGradient colors={['#FF6C24', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-          <Text style={styles.avatarText}>K</Text>
+          <Text style={styles.avatarText}>{initial}</Text>
         </View>
-        <Text style={styles.userName}>Kaio Jansen</Text>
-        <Text style={styles.userSince}>Membro desde Mar 2026</Text>
+        <Text style={styles.userName}>{displayName}</Text>
+        {joinDate ? <Text style={styles.userSince}>Membro desde {joinDate}</Text> : null}
+        {balance > 0 && (
+          <View style={styles.pointsBadge}>
+            <Text style={styles.pointsBadgeText}>{balance.toLocaleString()} pts</Text>
+          </View>
+        )}
       </Animated.View>
 
       {/* Stats */}
@@ -119,6 +152,22 @@ export default function PerfilScreen() {
           );
         })}
       </Animated.View>
+
+      {/* Subscription tier */}
+      {profile?.subscription_tier && profile.subscription_tier !== 'free' && (
+        <Animated.View entering={FadeInDown.delay(120).duration(500)} style={{ marginBottom: 24 }}>
+          <GlassCard style={styles.tierCard}>
+            <LinearGradient
+              colors={['rgba(255,108,36,0.15)', 'rgba(255,108,36,0.05)']}
+              style={StyleSheet.absoluteFill}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            />
+            <Text style={styles.tierLabel}>Plano</Text>
+            <Text style={styles.tierValue}>VITTA {profile.subscription_tier.toUpperCase()}</Text>
+          </GlassCard>
+        </Animated.View>
+      )}
 
       {/* Menu */}
       <Animated.View entering={FadeInDown.delay(150).duration(500)}>
@@ -138,7 +187,7 @@ export default function PerfilScreen() {
 
       {/* Logout */}
       <Animated.View entering={FadeInDown.delay(200).duration(500)}>
-        <TouchableOpacity activeOpacity={0.7} style={styles.logoutBtn}>
+        <TouchableOpacity activeOpacity={0.7} style={styles.logoutBtn} onPress={handleLogout}>
           <LogOutIcon />
           <Text style={styles.logoutText}>Sair da conta</Text>
         </TouchableOpacity>
@@ -167,11 +216,18 @@ const styles = StyleSheet.create({
   userName: { fontFamily: 'Montserrat_700Bold', color: '#fff', fontSize: 20 },
   userSince: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.5)', fontSize: 14, marginTop: 4 },
 
+  pointsBadge: { marginTop: 10, backgroundColor: 'rgba(255,108,36,0.15)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6, borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.3)' },
+  pointsBadgeText: { fontFamily: 'Montserrat_700Bold', color: '#FF6C24', fontSize: 14 },
+
   statsRow: { flexDirection: 'row', gap: 12, marginBottom: 32 },
   statCard: { flex: 1, padding: 16 },
   statContent: { alignItems: 'center' },
   statValue: { fontFamily: 'Montserrat_700Bold', color: '#fff', fontSize: 18, marginTop: 8 },
   statLabel: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 },
+
+  tierCard: { padding: 16, borderRadius: 16, overflow: 'hidden', alignItems: 'center' },
+  tierLabel: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  tierValue: { fontFamily: 'Montserrat_700Bold', color: '#FF6C24', fontSize: 18, marginTop: 4 },
 
   menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, minHeight: 44 },
   menuItemBorder: { borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.05)' },
