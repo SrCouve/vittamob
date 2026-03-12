@@ -9,7 +9,8 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Circle, Polyline } from 'react-native-svg';
-import * as ImagePicker from 'expo-image-picker';
+let ImagePicker: any = null;
+try { ImagePicker = require('expo-image-picker'); } catch {}
 import { GlassCard } from '../../src/components/GlassCard';
 import { useUserStore } from '../../src/stores/userStore';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -51,6 +52,10 @@ export default function EditarPerfilScreen() {
   }, [profile]);
 
   const pickImage = async () => {
+    if (!ImagePicker) {
+      Alert.alert('Indisponível', 'Upload de foto requer um build nativo.');
+      return;
+    }
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permissão necessária', 'Precisamos de acesso às suas fotos para atualizar o avatar.');

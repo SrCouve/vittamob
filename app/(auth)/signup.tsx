@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Dimensions, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import Animated, { FadeInUp, FadeIn } from 'react-native-reanimated';
 import Svg, { Path } from 'react-native-svg';
-import { FONTS } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/stores/authStore';
+
+const { width: SW, height: SH } = Dimensions.get('window');
+const BG_IMAGE = require('../../assets/backvitta.png');
 
 function EyeIcon({ size = 17 }: { size?: number }) {
   return (
@@ -40,7 +42,7 @@ function ArrowRightIcon({ size = 17 }: { size?: number }) {
 
 function ArrowLeftIcon({ size = 20 }: { size?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="m12 19-7-7 7-7" />
       <Path d="M19 12H5" />
     </Svg>
@@ -86,6 +88,24 @@ export default function SignupScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* ── Full-screen background photo ── */}
+      <Image source={BG_IMAGE} style={styles.bgImage} resizeMode="cover" />
+
+      {/* ── Gradient overlay: transparent top → dark bottom ── */}
+      <LinearGradient
+        colors={[
+          'rgba(13,13,13,0.0)',
+          'rgba(13,13,13,0.05)',
+          'rgba(13,13,13,0.4)',
+          'rgba(13,13,13,0.85)',
+          'rgba(13,13,13,0.95)',
+          'rgba(13,13,13,1.0)',
+        ]}
+        locations={[0, 0.2, 0.38, 0.55, 0.7, 1]}
+        style={styles.overlay}
+        pointerEvents="none"
+      />
+
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 40 }]}
         showsVerticalScrollIndicator={false}
@@ -94,12 +114,13 @@ export default function SignupScreen() {
         {/* Back button */}
         <Animated.View entering={FadeIn.duration(400)}>
           <TouchableOpacity style={styles.backBtn} activeOpacity={0.7} onPress={() => router.back()}>
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
             <ArrowLeftIcon />
           </TouchableOpacity>
         </Animated.View>
 
         {/* Logo + Tagline */}
-        <Animated.View entering={FadeInDown.duration(600)} style={styles.logoSection}>
+        <Animated.View entering={FadeIn.delay(100).duration(600)} style={styles.logoSection}>
           <View style={styles.logoRow}>
             <Text style={styles.logoVitta}>VITTA</Text>
             <Text style={styles.logoUp}> UP</Text>
@@ -109,8 +130,11 @@ export default function SignupScreen() {
           </Animated.Text>
         </Animated.View>
 
+        {/* Spacer pushes card to bottom */}
+        <View style={{ flex: 1 }} />
+
         {/* Glass Signup Card */}
-        <Animated.View entering={FadeInDown.delay(200).duration(600)} style={styles.cardSection}>
+        <Animated.View entering={FadeInUp.delay(200).duration(600)} style={styles.cardSection}>
           <View style={styles.cardGlow} />
           <View style={styles.card}>
             <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
@@ -210,7 +234,7 @@ export default function SignupScreen() {
         </Animated.View>
 
         {/* Login link */}
-        <Animated.View entering={FadeIn.delay(500).duration(600)} style={styles.loginRow}>
+        <Animated.View entering={FadeInUp.delay(400).duration(600)} style={styles.loginRow}>
           <Text style={styles.loginText}>Já tem conta? </Text>
           <TouchableOpacity activeOpacity={0.7} onPress={() => router.back()}>
             <Text style={styles.loginLink}>Entrar</Text>
@@ -218,7 +242,7 @@ export default function SignupScreen() {
         </Animated.View>
 
         {/* Footer */}
-        <Animated.Text entering={FadeIn.delay(700).duration(600)} style={styles.footerText}>
+        <Animated.Text entering={FadeInUp.delay(500).duration(600)} style={styles.footerText}>
           Ao criar sua conta, você concorda com nossos Termos de Uso e Política de Privacidade
         </Animated.Text>
       </ScrollView>
@@ -228,15 +252,35 @@ export default function SignupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'center' },
 
-  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+  // Background
+  bgImage: { position: 'absolute', top: 0, left: 0, width: SW, height: SH },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 
-  logoSection: { alignItems: 'center', marginBottom: 32 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24 },
+
+  backBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 24, overflow: 'hidden',
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)',
+  },
+
+  logoSection: { alignItems: 'center', marginBottom: 0 },
   logoRow: { flexDirection: 'row', alignItems: 'baseline' },
-  logoVitta: { fontFamily: 'Montserrat_800ExtraBold', fontSize: 40, color: '#FF6C24', letterSpacing: -0.5 },
-  logoUp: { fontFamily: 'Montserrat_300Light', fontSize: 40, color: '#fff', letterSpacing: -0.5 },
-  tagline: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.4)', fontSize: 14, marginTop: 8, letterSpacing: 1 },
+  logoVitta: {
+    fontFamily: 'Montserrat_800ExtraBold', fontSize: 40, color: '#FFFFFF', letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 10,
+  },
+  logoUp: {
+    fontFamily: 'Montserrat_300Light', fontSize: 40, color: '#fff', letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 10,
+  },
+  tagline: {
+    fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 8, letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
+  },
 
   cardSection: { width: '100%', maxWidth: 400, alignSelf: 'center' },
   cardGlow: { position: 'absolute', top: -1, left: -1, right: -1, bottom: -1, borderRadius: 28, backgroundColor: 'rgba(255,108,36,0.08)' },
@@ -263,9 +307,9 @@ const styles = StyleSheet.create({
   submitText: { fontFamily: 'Montserrat_700Bold', color: '#fff', fontSize: 15 },
   spinner: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)', borderTopColor: '#fff' },
 
-  loginRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 32 },
+  loginRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 28 },
   loginText: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.35)', fontSize: 13 },
   loginLink: { fontFamily: 'Montserrat_600SemiBold', color: '#FF6C24', fontSize: 13 },
 
-  footerText: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.15)', fontSize: 11, textAlign: 'center', marginTop: 32, lineHeight: 16 },
+  footerText: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.15)', fontSize: 11, textAlign: 'center', marginTop: 28, lineHeight: 16 },
 });
