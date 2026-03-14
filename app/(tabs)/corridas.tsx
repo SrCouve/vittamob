@@ -37,10 +37,21 @@ let ImagePicker: any = null;
 let Sharing: any = null;
 let ViewShot: any = null;
 let MediaLibrary: any = null;
+let FileSystem: any = null;
+let RNShare: any = null;
+let RecordingViewComp: any = null;
+let useViewRecorderHook: (() => any) | null = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 try { Sharing = require('expo-sharing'); } catch {}
 try { ViewShot = require('react-native-view-shot').default; } catch {}
 try { MediaLibrary = require('expo-media-library'); } catch {}
+try { FileSystem = require('expo-file-system'); } catch {}
+try { RNShare = require('react-native-share').default; } catch {}
+try {
+  const vr = require('react-native-view-recorder');
+  RecordingViewComp = vr.RecordingView;
+  useViewRecorderHook = vr.useViewRecorder;
+} catch {}
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -84,6 +95,16 @@ function ClockIcon({ size = 13, color = 'rgba(255,255,255,0.35)' }: { size?: num
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <SvgCircle cx="12" cy="12" r="10" />
       <Polyline points="12 6 12 12 16 14" />
+    </Svg>
+  );
+}
+
+function DownloadIcon({ size = 18, color = 'rgba(255,255,255,0.6)' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <Polyline points="7 10 12 15 17 10" />
+      <Path d="M12 15V3" />
     </Svg>
   );
 }
@@ -326,7 +347,24 @@ function StoryCard({ run, bgUri }: { run: StravaRun; bgUri: string | null }) {
 function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible: boolean; onClose: () => void }) {
   const viewShotRef = useRef<any>(null);
   const [bgUri, setBgUri] = useState<string | null>(null);
-  const [sharing, setSharing] = useState(false);
+  const [sharing, setSharing] = useState<'ig' | 'share' | 'dl' | null>(null);
+  const [dots, setDots] = useState('.');
+  const videoUriRef = useRef<string | null>(null);
+
+  // Video recorder hook — always called (constant at module level)
+  const recorder = useViewRecorderHook ? useViewRecorderHook() : null;
+
+  // Animated dots: . → .. → ... → .
+  React.useEffect(() => {
+    if (!sharing) return;
+    const iv = setInterval(() => {
+      setDots(d => d.length >= 3 ? '.' : d + '.');
+    }, 500);
+    return () => clearInterval(iv);
+  }, [sharing]);
+
+  // Reset cached video when photo changes
+  React.useEffect(() => { videoUriRef.current = null; }, [bgUri]);
 
   if (!run) return null;
 
@@ -344,40 +382,129 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
     }
   };
 
-  const handleShare = async () => {
-    setSharing(true);
-    try {
-      let uri: string | null = null;
-      if (viewShotRef.current?.capture) {
-        uri = await viewShotRef.current.capture();
+  // Record 4s video of the animated StoryCard
+  const recordVideo = async (): Promise<string | null> => {
+    if (videoUriRef.current) return videoUriRef.current;
+
+    if (recorder && FileSystem) {
+      try {
+        const output = FileSystem.cacheDirectory + `story_${Date.now()}.mp4`;
+        const recordPromise = recorder.record({
+          output,
+          fps: 30,
+          codec: 'h264',
+          width: Math.round(STORY_W * 2),
+          height: Math.round(STORY_H * 2),
+        });
+        // Let animations play for 4 seconds then stop
+        await new Promise(r => setTimeout(r, 4000));
+        recorder.stop();
+        const uri = await recordPromise;
+        videoUriRef.current = uri;
+        return uri;
+      } catch (e) {
+        console.warn('Video recording failed, falling back to image', e);
       }
-      if (!uri) { setSharing(false); return; }
+    }
+
+    // Fallback: capture static image
+    if (viewShotRef.current?.capture) {
+      return await viewShotRef.current.capture();
+    }
+    return null;
+  };
+
+  const isVideo = (uri: string) => uri.endsWith('.mp4');
+
+  const handleStories = async () => {
+    setSharing('ig');
+    try {
+      const uri = await recordVideo();
+      if (!uri) { setSharing(null); return; }
 
       // Save to gallery
       if (MediaLibrary) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
-        if (status === 'granted') {
-          await MediaLibrary.saveToLibraryAsync(uri);
-        }
+        if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
       }
 
-      // Open share sheet
+      // Try react-native-share for direct IG Stories
+      if (RNShare && isVideo(uri)) {
+        try {
+          await RNShare.shareSingle({
+            social: 'instagramstories' as any,
+            backgroundVideo: uri,
+            type: 'video/mp4',
+          });
+          setSharing(null);
+          return;
+        } catch {}
+      }
+
+      // Fallback: share sheet
       if (Sharing && await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          UTI: 'public.image',
+          mimeType: isVideo(uri) ? 'video/mp4' : 'image/png',
+          UTI: isVideo(uri) ? 'public.mpeg-4' : 'public.image',
         });
       } else {
-        Alert.alert('Salvo!', 'A imagem foi salva na sua galeria.');
+        Alert.alert('Salvo!', 'O vídeo foi salvo na galeria. Abra o Instagram e compartilhe!');
       }
     } catch { Alert.alert('Erro', 'Não foi possível compartilhar.'); }
-    setSharing(false);
+    setSharing(null);
+  };
+
+  const handleShare = async () => {
+    setSharing('share');
+    try {
+      const uri = await recordVideo();
+      if (!uri) { setSharing(null); return; }
+
+      if (MediaLibrary) {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
+      }
+
+      if (Sharing && await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: isVideo(uri) ? 'video/mp4' : 'image/png',
+          UTI: isVideo(uri) ? 'public.mpeg-4' : 'public.image',
+        });
+      } else {
+        Alert.alert('Salvo!', 'Arquivo salvo na galeria.');
+      }
+    } catch { Alert.alert('Erro', 'Não foi possível compartilhar.'); }
+    setSharing(null);
+  };
+
+  const handleDownload = async () => {
+    setSharing('dl');
+    try {
+      const uri = await recordVideo();
+      if (!uri) { setSharing(null); return; }
+
+      if (MediaLibrary) {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') {
+          await MediaLibrary.saveToLibraryAsync(uri);
+          Alert.alert('Salvo!', 'Vídeo salvo na sua galeria.');
+        } else {
+          Alert.alert('Permissão', 'Permita o acesso à galeria para salvar.');
+        }
+      }
+    } catch { Alert.alert('Erro', 'Não foi possível salvar.'); }
+    setSharing(null);
   };
 
   const handleClose = () => {
     setBgUri(null);
+    videoUriRef.current = null;
     onClose();
   };
+
+  // Choose the recording wrapper
+  const RecWrapper = RecordingViewComp || View;
+  const recWrapperProps = recorder ? { sessionId: recorder.sessionId } : {};
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
@@ -392,24 +519,20 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
             <View style={{ width: 60 }} />
           </View>
 
-          {/* Preview */}
+          {/* Preview — RecordingView wraps for video, ViewShot for fallback */}
           <View style={storyStyles.previewWrap}>
-            {ViewShot ? (
-              <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={storyStyles.viewShot}>
+            <RecWrapper {...recWrapperProps} style={storyStyles.viewShot}>
+              {ViewShot && !recorder ? (
+                <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ flex: 1 }}>
+                  <StoryCard run={run} bgUri={bgUri} />
+                </ViewShot>
+              ) : (
                 <StoryCard run={run} bgUri={bgUri} />
-              </ViewShot>
-            ) : (
-              <View style={storyStyles.viewShot}>
-                <StoryCard run={run} bgUri={bgUri} />
-              </View>
-            )}
-            {/* Photo picker overlay — centered on card, disappears after pick */}
+              )}
+            </RecWrapper>
+            {/* Photo picker overlay */}
             {!bgUri && (
-              <TouchableOpacity
-                onPress={pickPhoto}
-                style={storyStyles.pickOverlay}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity onPress={pickPhoto} style={storyStyles.pickOverlay} activeOpacity={0.7}>
                 <View style={storyStyles.pickOverlayBtn}>
                   <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                     <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
@@ -421,115 +544,104 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
             )}
           </View>
 
-          {/* Actions — liquid glass buttons like FlowPost */}
+          {/* Actions */}
           <View style={storyStyles.actionsCol}>
-            <View style={storyStyles.actionsRow}>
-            {/* Instagram Stories — glass with IG tint */}
-            <TouchableOpacity
-              onPress={async () => {
-                setSharing(true);
-                try {
-                  let uri: string | null = null;
-                  if (viewShotRef.current?.capture) {
-                    uri = await viewShotRef.current.capture();
-                  }
-                  if (!uri) { setSharing(false); return; }
-                  if (MediaLibrary) {
-                    const { status } = await MediaLibrary.requestPermissionsAsync();
-                    if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
-                  }
-                  const igUrl = `instagram-stories://share?source_application=vitta-up`;
-                  const canOpen = await Linking.canOpenURL(igUrl);
-                  if (canOpen) {
-                    await Linking.openURL(igUrl);
-                  } else if (Sharing && await Sharing.isAvailableAsync()) {
-                    await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.image' });
-                  } else {
-                    Alert.alert('Salvo!', 'A imagem foi salva na galeria. Abra o Instagram e compartilhe!');
-                  }
-                } catch { Alert.alert('Erro', 'Não foi possível abrir o Instagram.'); }
-                setSharing(false);
-              }}
-              activeOpacity={0.85}
-              disabled={sharing}
-              style={storyStyles.igBtn}
-            >
-              {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
-              {/* IG glass tint */}
-              <LinearGradient
-                colors={['rgba(225,48,108,0.22)', 'rgba(188,24,136,0.14)', 'rgba(81,52,212,0.18)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              {/* Top specular highlight */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.20)', 'rgba(255,255,255,0)']}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 0.6 }}
-                style={StyleSheet.absoluteFill}
-              />
-              {/* Specular line */}
-              <LinearGradient
-                colors={['transparent', 'rgba(255,255,255,0.25)', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 0.5 }}
-              />
-              {/* Inner border glow */}
-              <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 0.5, borderColor: 'rgba(225,48,108,0.3)' }]} />
-              <View style={storyStyles.btnInner}>
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9a5.5 5.5 0 0 1-5.5 5.5h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2z" />
-                  <SvgCircle cx="12" cy="12" r="4.5" />
-                  <SvgCircle cx="17.5" cy="6.5" r="1" fill="rgba(255,255,255,0.85)" />
-                </Svg>
-                <Text style={storyStyles.igBtnText}>Stories</Text>
-              </View>
-            </TouchableOpacity>
+            {/* Loading — runner + animated dots */}
+            {sharing && (
+              <Animated.View entering={FadeIn.duration(250)} style={storyStyles.loadingFloat}>
+                <LottieView source={RUNNING_ANIM} autoPlay loop speed={1.2} style={{ width: 48, height: 48 }} />
+                <Text style={storyStyles.loadingText}>Preparando{dots}</Text>
+              </Animated.View>
+            )}
 
-            {/* Compartilhar — orange glass like FlowPost glass-btn-primary */}
-            <TouchableOpacity
-              onPress={handleShare}
-              activeOpacity={0.85}
-              disabled={sharing}
-              style={storyStyles.shareBtn}
-            >
-              {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
-              {/* Orange glass tint */}
-              <LinearGradient
-                colors={['rgba(255,108,36,0.22)', 'rgba(255,133,64,0.14)', 'rgba(255,172,125,0.18)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              {/* Top specular highlight */}
-              <LinearGradient
-                colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 0.6 }}
-                style={StyleSheet.absoluteFill}
-              />
-              {/* Specular line */}
-              <LinearGradient
-                colors={['transparent', 'rgba(255,210,180,0.3)', 'transparent']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 0.5 }}
-              />
-              {/* Inner border glow */}
-              <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 0.5, borderColor: 'rgba(255,140,80,0.3)' }]} />
-              <View style={storyStyles.btnInner}>
-                {sharing ? (
-                  <ActivityIndicator color="#FF8540" size="small" />
-                ) : (
-                  <>
-                    <ShareIcon size={17} color="rgba(255,133,64,0.85)" />
-                    <Text style={storyStyles.shareBtnText}>Compartilhar</Text>
-                  </>
-                )}
-              </View>
-            </TouchableOpacity>
+            <View style={storyStyles.actionsRow}>
+              {/* Download — icon only */}
+              <TouchableOpacity
+                onPress={handleDownload}
+                activeOpacity={0.85}
+                disabled={!!sharing}
+                style={[storyStyles.dlBtn, sharing === 'dl' && storyStyles.btnActive]}
+              >
+                {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.04)']}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.12)' }]} />
+                <DownloadIcon size={20} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+
+              {/* Instagram Stories */}
+              <TouchableOpacity
+                onPress={handleStories}
+                activeOpacity={0.85}
+                disabled={!!sharing}
+                style={[storyStyles.igBtn, sharing === 'ig' && storyStyles.btnActive]}
+              >
+                {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
+                <LinearGradient
+                  colors={['rgba(225,48,108,0.22)', 'rgba(188,24,136,0.14)', 'rgba(81,52,212,0.18)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.20)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 0.6 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(255,255,255,0.25)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 0.5 }}
+                />
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 0.5, borderColor: 'rgba(225,48,108,0.3)' }]} />
+                <View style={storyStyles.btnInner}>
+                  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9a5.5 5.5 0 0 1-5.5 5.5h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2z" />
+                    <SvgCircle cx="12" cy="12" r="4.5" />
+                    <SvgCircle cx="17.5" cy="6.5" r="1" fill="rgba(255,255,255,0.85)" />
+                  </Svg>
+                  <Text style={storyStyles.igBtnText}>Stories</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Compartilhar */}
+              <TouchableOpacity
+                onPress={handleShare}
+                activeOpacity={0.85}
+                disabled={!!sharing}
+                style={[storyStyles.shareBtn, sharing === 'share' && storyStyles.btnActive]}
+              >
+                {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
+                <LinearGradient
+                  colors={['rgba(255,108,36,0.22)', 'rgba(255,133,64,0.14)', 'rgba(255,172,125,0.18)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 0.6 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <LinearGradient
+                  colors={['transparent', 'rgba(255,210,180,0.3)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 0.5 }}
+                />
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 0.5, borderColor: 'rgba(255,140,80,0.3)' }]} />
+                <View style={storyStyles.btnInner}>
+                  <ShareIcon size={17} color="rgba(255,133,64,0.85)" />
+                  <Text style={storyStyles.shareBtnText}>Compartilhar</Text>
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -969,6 +1081,12 @@ const storyStyles = StyleSheet.create({
     fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
   },
+  dlBtn: {
+    width: 52, height: 52, borderRadius: 18, overflow: 'hidden',
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
+  },
   igBtn: {
     flex: 1, borderRadius: 18, overflow: 'hidden',
     minHeight: 52,
@@ -991,6 +1109,17 @@ const storyStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, paddingVertical: 15, paddingHorizontal: 24,
     zIndex: 2,
+  },
+  btnActive: {
+    opacity: 0.5,
+  },
+  loadingFloat: {
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8,
+  },
+  loadingText: {
+    fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.6)',
+    fontSize: 13, marginTop: 2, width: 90, textAlign: 'center',
   },
 });
 
