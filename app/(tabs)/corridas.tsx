@@ -38,11 +38,20 @@ let Sharing: any = null;
 let ViewShot: any = null;
 let MediaLibrary: any = null;
 let RNShare: any = null;
+let RecordingViewComp: any = null;
+let useViewRecorderHook: any = null;
+let FileSystem: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 try { Sharing = require('expo-sharing'); } catch {}
 try { ViewShot = require('react-native-view-shot').default; } catch {}
 try { MediaLibrary = require('expo-media-library'); } catch {}
 try { RNShare = require('react-native-share').default; } catch {}
+try {
+  const vr = require('react-native-view-recorder');
+  RecordingViewComp = vr.RecordingView;
+  useViewRecorderHook = vr.useViewRecorder;
+} catch {}
+try { FileSystem = require('expo-file-system'); } catch {}
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -57,6 +66,8 @@ const webGlass = isWeb
 
 const THUNDER_ANIM = require('../../assets/thunder-energia.json');
 const RUNNING_ANIM = require('../../assets/running.json');
+const THUNDER_GIF = require('../../assets/thunder-energia.gif');
+const RUNNING_GIF = require('../../assets/running.gif');
 const RUNNING_SHOE_ICON = require('../../assets/icon-running-shoe.png');
 
 // ─── Icons ───────────────────────────────────────────────────────
@@ -243,7 +254,7 @@ function StatsHero({ runs, totalSparks }: { runs: StravaRun[]; totalSparks: numb
 const STORY_W = SW * 0.9;
 const STORY_H = STORY_W * (16 / 9);
 
-function StoryCard({ run, bgUri }: { run: StravaRun; bgUri: string | null }) {
+function StoryCard({ run, bgUri, useGif }: { run: StravaRun; bgUri: string | null; useGif?: boolean }) {
   return (
     <View style={storyStyles.card}>
       {/* Background — photo takes full space */}
@@ -300,7 +311,7 @@ function StoryCard({ run, bgUri }: { run: StravaRun; bgUri: string | null }) {
             <Text style={storyStyles.date}>{formatDate(run.activity_date)} · {formatDateFull(run.activity_date)}</Text>
           </View>
           <View style={storyStyles.sparksBadge}>
-            <LottieView source={THUNDER_ANIM} autoPlay loop speed={0.8} style={{ width: 24, height: 24 }} />
+            {useGif ? <Image source={THUNDER_GIF} style={{ width: 24, height: 24 }} /> : <LottieView source={THUNDER_ANIM} autoPlay loop speed={0.8} style={{ width: 24, height: 24 }} />}
             <Text style={storyStyles.sparksValue}>+{run.sparks_awarded}</Text>
           </View>
         </View>
@@ -312,7 +323,7 @@ function StoryCard({ run, bgUri }: { run: StravaRun; bgUri: string | null }) {
               colors={['rgba(255,108,36,0.2)', 'rgba(255,108,36,0.08)']}
               style={StyleSheet.absoluteFill}
             />
-            <LottieView source={RUNNING_ANIM} autoPlay loop speed={1} style={{ width: 36, height: 36 }} />
+            {useGif ? <Image source={RUNNING_GIF} style={{ width: 36, height: 36 }} /> : <LottieView source={RUNNING_ANIM} autoPlay loop speed={1} style={{ width: 36, height: 36 }} />}
           </View>
 
           <View style={storyStyles.statItem}>
@@ -339,6 +350,15 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const viewShotRef = useRef<any>(null);
   const [bgUri, setBgUri] = useState<string | null>(null);
   const [sharing, setSharing] = useState<'ig' | 'share' | 'dl' | null>(null);
+  const [dots, setDots] = useState('.');
+  const recorder = useViewRecorderHook ? useViewRecorderHook() : null;
+
+  // Animated dots for video recording
+  React.useEffect(() => {
+    if (sharing !== 'dl' || !recorder) return;
+    const iv = setInterval(() => setDots(d => d.length >= 3 ? '.' : d + '.'), 500);
+    return () => clearInterval(iv);
+  }, [sharing, recorder]);
 
   if (!run) return null;
 
@@ -448,6 +468,32 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const handleDownload = async () => {
     setSharing('dl');
     try {
+      // Try video first (view-recorder + GIF animations)
+      if (recorder && FileSystem) {
+        try {
+          const outputPath = `${FileSystem.cacheDirectory}vitta-story-${Date.now()}.mp4`;
+          const videoUri = await recorder.record({
+            output: outputPath,
+            fps: 30,
+            totalFrames: 150, // 5 seconds
+            codec: 'h264' as const,
+            quality: 0.85,
+          });
+          if (videoUri && MediaLibrary) {
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            if (status === 'granted') {
+              await MediaLibrary.saveToLibraryAsync(videoUri);
+              Alert.alert('Salvo!', 'Vídeo salvo na sua galeria.');
+              setSharing(null);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('Video failed, falling back to image:', e);
+        }
+      }
+
+      // Fallback: static image
       const uri = await captureMedia();
       if (!uri) { Alert.alert('Erro', 'Não foi possível capturar.'); setSharing(null); return; }
 
@@ -489,13 +535,24 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
               <StoryCard run={run} bgUri={bgUri} />
             </View>
             {/* Hidden capture — NO borderRadius, full rectangle */}
-            {ViewShot && (
-              <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}>
+            {/* Hidden capture — no borderRadius, uses GIF instead of Lottie for video recording */}
+            <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}>
+              {recorder && RecordingViewComp ? (
+                <RecordingViewComp sessionId={recorder.sessionId} style={{ width: STORY_W, height: STORY_H }}>
+                  {ViewShot ? (
+                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
+                      <StoryCard run={run} bgUri={bgUri} useGif />
+                    </ViewShot>
+                  ) : (
+                    <StoryCard run={run} bgUri={bgUri} useGif />
+                  )}
+                </RecordingViewComp>
+              ) : ViewShot ? (
                 <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
                   <StoryCard run={run} bgUri={bgUri} />
                 </ViewShot>
-              </View>
-            )}
+              ) : null}
+            </View>
             {/* Photo picker overlay */}
             {!bgUri && (
               <TouchableOpacity onPress={pickPhoto} style={storyStyles.pickOverlay} activeOpacity={0.7}>
@@ -512,6 +569,13 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 
           {/* Actions */}
           <View style={storyStyles.actionsCol}>
+            {/* Loading — only during video recording */}
+            {sharing === 'dl' && recorder && (
+              <Animated.View entering={FadeIn.duration(250)} style={storyStyles.loadingFloat}>
+                <LottieView source={RUNNING_ANIM} autoPlay loop speed={1.2} style={{ width: 48, height: 48 }} />
+                <Text style={storyStyles.loadingText}>Preparando{dots}</Text>
+              </Animated.View>
+            )}
             <View style={storyStyles.actionsRow}>
               {/* Download — icon only */}
               <TouchableOpacity
@@ -1021,6 +1085,14 @@ const storyStyles = StyleSheet.create({
   },
   previewRounded: {
     borderRadius: 24, overflow: 'hidden',
+  },
+  loadingFloat: {
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 8,
+  },
+  loadingText: {
+    fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.6)',
+    fontSize: 13, marginTop: 2, width: 90, textAlign: 'center',
   },
   actionsCol: {
     paddingHorizontal: 20, paddingBottom: 50, paddingTop: 16,
