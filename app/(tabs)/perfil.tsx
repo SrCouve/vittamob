@@ -179,7 +179,7 @@ export default function PerfilScreen() {
     // vittaup.fit middleware does a 302 redirect to vittaup:// deep link
     const redirectUri = 'https://vittaup.fit/auth/strava/callback';
     const authUrl =
-      `https://www.strava.com/oauth/authorize` +
+      `https://www.strava.com/oauth/mobile/authorize` +
       `?client_id=${STRAVA_CLIENT_ID}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&response_type=code` +
