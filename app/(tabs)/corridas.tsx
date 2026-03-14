@@ -37,16 +37,16 @@ let ImagePicker: any = null;
 let Sharing: any = null;
 let ViewShot: any = null;
 let MediaLibrary: any = null;
-let FileSystem: any = null;
 let RNShare: any = null;
+let FileSystem: any = null;
 let RecordingViewComp: any = null;
 let useViewRecorderHook: (() => any) | null = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 try { Sharing = require('expo-sharing'); } catch {}
 try { ViewShot = require('react-native-view-shot').default; } catch {}
 try { MediaLibrary = require('expo-media-library'); } catch {}
-try { FileSystem = require('expo-file-system'); } catch {}
 try { RNShare = require('react-native-share').default; } catch {}
+try { FileSystem = require('expo-file-system'); } catch {}
 try {
   const vr = require('react-native-view-recorder');
   RecordingViewComp = vr.RecordingView;
@@ -349,9 +349,8 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const [bgUri, setBgUri] = useState<string | null>(null);
   const [sharing, setSharing] = useState<'ig' | 'share' | 'dl' | null>(null);
   const [dots, setDots] = useState('.');
-  const videoUriRef = useRef<string | null>(null);
 
-  // Video recorder hook — always called (constant at module level)
+  // Video recorder — only used for download button
   const recorder = useViewRecorderHook ? useViewRecorderHook() : null;
 
   // Animated dots: . → .. → ... → .
@@ -363,51 +362,44 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
     return () => clearInterval(iv);
   }, [sharing]);
 
-  // Reset cached video when photo changes
-  React.useEffect(() => { videoUriRef.current = null; }, [bgUri]);
-
   if (!run) return null;
 
-  const pickPhoto = async () => {
+  const pickPhoto = () => {
     if (!ImagePicker) {
-      Alert.alert('Indisponível', 'Galeria requer build nativo.');
+      Alert.alert('Indisponível', 'Requer build nativo.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
-      quality: 0.9,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      setBgUri(result.assets[0].uri);
-    }
+    Alert.alert('Foto de fundo', 'Escolha de onde pegar a foto', [
+      {
+        text: 'Galeria',
+        onPress: async () => {
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: 'images',
+            quality: 0.9,
+          });
+          if (!result.canceled && result.assets?.[0]) setBgUri(result.assets[0].uri);
+        },
+      },
+      {
+        text: 'Tirar foto',
+        onPress: async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permissão', 'Precisamos de acesso à câmera.');
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            quality: 0.9,
+          });
+          if (!result.canceled && result.assets?.[0]) setBgUri(result.assets[0].uri);
+        },
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
   };
 
-  // Record 4s video or fallback to static image
+  // Capture static image of the StoryCard
   const captureMedia = async (): Promise<string | null> => {
-    if (videoUriRef.current) return videoUriRef.current;
-
-    // Try video recording first
-    if (recorder && RecordingViewComp && FileSystem) {
-      try {
-        const output = FileSystem.cacheDirectory + `story_${Date.now()}.mp4`;
-        const recordPromise = recorder.record({
-          output,
-          fps: 30,
-          codec: 'h264',
-          width: Math.round(STORY_W * 2),
-          height: Math.round(STORY_H * 2),
-        });
-        await new Promise(r => setTimeout(r, 4000));
-        recorder.stop();
-        const uri = await recordPromise;
-        videoUriRef.current = uri;
-        return uri;
-      } catch (e) {
-        console.warn('Video recording failed:', e);
-      }
-    }
-
-    // Fallback: static image via ViewShot
     if (viewShotRef.current?.capture) {
       try {
         return await viewShotRef.current.capture();
@@ -415,11 +407,8 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
         console.warn('ViewShot capture failed:', e);
       }
     }
-
     return null;
   };
-
-  const isVideo = (uri: string) => uri.endsWith('.mp4');
 
   const handleStories = async () => {
     setSharing('ig');
@@ -433,13 +422,13 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
         if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
       }
 
-      // Try react-native-share for direct IG Stories
-      if (RNShare && isVideo(uri)) {
+      // Try react-native-share direct to IG Stories
+      if (RNShare) {
         try {
           await RNShare.shareSingle({
             social: 'instagramstories' as any,
-            backgroundVideo: uri,
-            type: 'video/mp4',
+            backgroundImage: uri,
+            type: 'image/png',
           });
           setSharing(null);
           return;
@@ -448,12 +437,9 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 
       // Fallback: share sheet
       if (Sharing && await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: isVideo(uri) ? 'video/mp4' : 'image/png',
-          UTI: isVideo(uri) ? 'public.mpeg-4' : 'public.image',
-        });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.image' });
       } else {
-        Alert.alert('Salvo!', 'O vídeo foi salvo na galeria. Abra o Instagram e compartilhe!');
+        Alert.alert('Salvo!', 'A imagem foi salva na galeria. Abra o Instagram e compartilhe!');
       }
     } catch { Alert.alert('Erro', 'Não foi possível compartilhar.'); }
     setSharing(null);
@@ -471,12 +457,9 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
       }
 
       if (Sharing && await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: isVideo(uri) ? 'video/mp4' : 'image/png',
-          UTI: isVideo(uri) ? 'public.mpeg-4' : 'public.image',
-        });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.image' });
       } else {
-        Alert.alert('Salvo!', 'Arquivo salvo na galeria.');
+        Alert.alert('Salvo!', 'Imagem salva na galeria.');
       }
     } catch { Alert.alert('Erro', 'Não foi possível compartilhar.'); }
     setSharing(null);
@@ -485,14 +468,38 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const handleDownload = async () => {
     setSharing('dl');
     try {
-      const uri = await captureMedia();
-      if (!uri) { Alert.alert('Erro', 'Não foi possível capturar a imagem.'); setSharing(null); return; }
+      let uri: string | null = null;
+      let isVideo = false;
+
+      // Try video recording first (4s animated clip)
+      if (recorder && RecordingViewComp && FileSystem) {
+        try {
+          const output = FileSystem.cacheDirectory + `story_${Date.now()}.mp4`;
+          const recordPromise = recorder.record({
+            output,
+            fps: 30,
+            codec: 'h264',
+            width: Math.round(STORY_W * 2),
+            height: Math.round(STORY_H * 2),
+          });
+          await new Promise(r => setTimeout(r, 4000));
+          recorder.stop();
+          uri = await recordPromise;
+          isVideo = true;
+        } catch (e) {
+          console.warn('Video recording failed, saving image instead:', e);
+        }
+      }
+
+      // Fallback: static image
+      if (!uri) uri = await captureMedia();
+      if (!uri) { Alert.alert('Erro', 'Não foi possível capturar.'); setSharing(null); return; }
 
       if (MediaLibrary) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           await MediaLibrary.saveToLibraryAsync(uri);
-          Alert.alert('Salvo!', 'Vídeo salvo na sua galeria.');
+          Alert.alert('Salvo!', isVideo ? 'Vídeo salvo na sua galeria!' : 'Imagem salva na sua galeria.');
         } else {
           Alert.alert('Permissão', 'Permita o acesso à galeria para salvar.');
         }
@@ -503,11 +510,8 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 
   const handleClose = () => {
     setBgUri(null);
-    videoUriRef.current = null;
     onClose();
   };
-
-  // Wrapper for recording
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
@@ -522,7 +526,7 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
             <View style={{ width: 60 }} />
           </View>
 
-          {/* Preview — ViewShot always mounted for fallback, RecordingView wraps if available */}
+          {/* Preview — RecordingView wraps for video download, ViewShot always inside */}
           <View style={storyStyles.previewWrap}>
             {recorder && RecordingViewComp ? (
               <RecordingViewComp sessionId={recorder.sessionId} style={storyStyles.viewShot}>
