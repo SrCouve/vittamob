@@ -81,8 +81,9 @@ export default function EditarPerfilScreen() {
     setIsUploading(true);
     try {
       const asset = result.assets[0];
-      const ext = asset.uri.split('.').pop() ?? 'jpg';
-      const fileName = `${user?.id}/avatar.${ext}`;
+      const ext = (asset.uri.split('.').pop() ?? 'jpg').toLowerCase();
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      const fileName = `${user?.id}/avatar.${ext === 'jpeg' ? 'jpg' : ext}`;
 
       // Read file as base64 and upload to Supabase Storage
       let base64: string;
@@ -98,12 +99,13 @@ export default function EditarPerfilScreen() {
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, decode(base64), {
-          contentType: `image/${ext}`,
+          contentType: mimeType,
           upsert: true,
         });
 
       if (uploadError) {
-        Alert.alert('Erro', 'Não foi possível enviar a foto.');
+        console.error('Avatar upload error:', JSON.stringify(uploadError));
+        Alert.alert('Erro', uploadError.message || 'Não foi possível enviar a foto.');
         setIsUploading(false);
         return;
       }
@@ -116,8 +118,9 @@ export default function EditarPerfilScreen() {
       const newUrl = `${urlData.publicUrl}?t=${Date.now()}`;
       setAvatarUrl(newUrl);
       await updateProfile({ avatar_url: newUrl });
-    } catch (e) {
-      Alert.alert('Erro', 'Falha ao atualizar a foto.');
+    } catch (e: any) {
+      console.error('Avatar catch error:', e);
+      Alert.alert('Erro', e?.message || 'Falha ao atualizar a foto.');
     }
     setIsUploading(false);
   };
