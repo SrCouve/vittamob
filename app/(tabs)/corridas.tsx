@@ -12,6 +12,7 @@ import {
   Image,
   Modal,
   Alert,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -35,9 +36,11 @@ import { useStravaStore, type StravaRun } from '../../src/stores/stravaStore';
 let ImagePicker: any = null;
 let Sharing: any = null;
 let ViewShot: any = null;
+let MediaLibrary: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 try { Sharing = require('expo-sharing'); } catch {}
 try { ViewShot = require('react-native-view-shot').default; } catch {}
+try { MediaLibrary = require('expo-media-library'); } catch {}
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -335,8 +338,6 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       quality: 0.9,
-      allowsEditing: true,
-      aspect: [9, 16],
     });
     if (!result.canceled && result.assets?.[0]) {
       setBgUri(result.assets[0].uri);
@@ -344,21 +345,32 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   };
 
   const handleShare = async () => {
-    if (!viewShotRef.current?.capture) return;
     setSharing(true);
     try {
-      const uri = await viewShotRef.current.capture();
+      let uri: string | null = null;
+      if (viewShotRef.current?.capture) {
+        uri = await viewShotRef.current.capture();
+      }
+      if (!uri) { setSharing(false); return; }
+
+      // Save to gallery
+      if (MediaLibrary) {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') {
+          await MediaLibrary.saveToLibraryAsync(uri);
+        }
+      }
+
+      // Open share sheet
       if (Sharing && await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'image/png',
-          dialogTitle: 'Compartilhar corrida',
+          UTI: 'public.image',
         });
       } else {
-        Alert.alert('Indisponível', 'Compartilhamento não disponível neste dispositivo.');
+        Alert.alert('Salvo!', 'A imagem foi salva na sua galeria.');
       }
-    } catch (e) {
-      Alert.alert('Erro', 'Não foi possível compartilhar.');
-    }
+    } catch { Alert.alert('Erro', 'Não foi possível compartilhar.'); }
     setSharing(false);
   };
 
@@ -391,26 +403,134 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
                 <StoryCard run={run} bgUri={bgUri} />
               </View>
             )}
+            {/* Photo picker overlay — centered on card, disappears after pick */}
+            {!bgUri && (
+              <TouchableOpacity
+                onPress={pickPhoto}
+                style={storyStyles.pickOverlay}
+                activeOpacity={0.7}
+              >
+                <View style={storyStyles.pickOverlayBtn}>
+                  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <SvgCircle cx="12" cy="13" r="4" />
+                  </Svg>
+                  <Text style={storyStyles.pickOverlayText}>Escolher foto</Text>
+                </View>
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* Actions */}
-          <View style={storyStyles.actionsRow}>
-            <TouchableOpacity onPress={pickPhoto} style={storyStyles.pickPhotoBtn} activeOpacity={0.7}>
-              <Text style={storyStyles.pickPhotoText}>{bgUri ? 'Trocar foto' : 'Escolher foto'}</Text>
+          {/* Actions — liquid glass buttons like FlowPost */}
+          <View style={storyStyles.actionsCol}>
+            <View style={storyStyles.actionsRow}>
+            {/* Instagram Stories — glass with IG tint */}
+            <TouchableOpacity
+              onPress={async () => {
+                setSharing(true);
+                try {
+                  let uri: string | null = null;
+                  if (viewShotRef.current?.capture) {
+                    uri = await viewShotRef.current.capture();
+                  }
+                  if (!uri) { setSharing(false); return; }
+                  if (MediaLibrary) {
+                    const { status } = await MediaLibrary.requestPermissionsAsync();
+                    if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
+                  }
+                  const igUrl = `instagram-stories://share?source_application=vitta-up`;
+                  const canOpen = await Linking.canOpenURL(igUrl);
+                  if (canOpen) {
+                    await Linking.openURL(igUrl);
+                  } else if (Sharing && await Sharing.isAvailableAsync()) {
+                    await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.image' });
+                  } else {
+                    Alert.alert('Salvo!', 'A imagem foi salva na galeria. Abra o Instagram e compartilhe!');
+                  }
+                } catch { Alert.alert('Erro', 'Não foi possível abrir o Instagram.'); }
+                setSharing(false);
+              }}
+              activeOpacity={0.85}
+              disabled={sharing}
+              style={storyStyles.igBtn}
+            >
+              {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
+              {/* IG glass tint */}
+              <LinearGradient
+                colors={['rgba(225,48,108,0.22)', 'rgba(188,24,136,0.14)', 'rgba(81,52,212,0.18)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Top specular highlight */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.20)', 'rgba(255,255,255,0)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 0.6 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Specular line */}
+              <LinearGradient
+                colors={['transparent', 'rgba(255,255,255,0.25)', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 0.5 }}
+              />
+              {/* Inner border glow */}
+              <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 0.5, borderColor: 'rgba(225,48,108,0.3)' }]} />
+              <View style={storyStyles.btnInner}>
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M7.5 2h9A5.5 5.5 0 0 1 22 7.5v9a5.5 5.5 0 0 1-5.5 5.5h-9A5.5 5.5 0 0 1 2 16.5v-9A5.5 5.5 0 0 1 7.5 2z" />
+                  <SvgCircle cx="12" cy="12" r="4.5" />
+                  <SvgCircle cx="17.5" cy="6.5" r="1" fill="rgba(255,255,255,0.85)" />
+                </Svg>
+                <Text style={storyStyles.igBtnText}>Stories</Text>
+              </View>
             </TouchableOpacity>
 
+            {/* Compartilhar — orange glass like FlowPost glass-btn-primary */}
             <TouchableOpacity
               onPress={handleShare}
-              style={storyStyles.shareBtn}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               disabled={sharing}
+              style={storyStyles.shareBtn}
             >
-              {sharing ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={storyStyles.shareBtnText}>Compartilhar</Text>
-              )}
+              {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
+              {/* Orange glass tint */}
+              <LinearGradient
+                colors={['rgba(255,108,36,0.22)', 'rgba(255,133,64,0.14)', 'rgba(255,172,125,0.18)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Top specular highlight */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 0.6 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Specular line */}
+              <LinearGradient
+                colors={['transparent', 'rgba(255,210,180,0.3)', 'transparent']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ position: 'absolute', top: 0, left: '12%', right: '12%', height: 0.5 }}
+              />
+              {/* Inner border glow */}
+              <View style={[StyleSheet.absoluteFill, { borderRadius: 18, borderWidth: 0.5, borderColor: 'rgba(255,140,80,0.3)' }]} />
+              <View style={storyStyles.btnInner}>
+                {sharing ? (
+                  <ActivityIndicator color="#FF8540" size="small" />
+                ) : (
+                  <>
+                    <ShareIcon size={17} color="rgba(255,133,64,0.85)" />
+                    <Text style={storyStyles.shareBtnText}>Compartilhar</Text>
+                  </>
+                )}
+              </View>
             </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -793,6 +913,15 @@ const storyStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     width: '100%', paddingHorizontal: 20, marginBottom: 20,
   },
+  photoBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  photoBtnText: {
+    fontFamily: FONTS.montserrat.medium, color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+  },
   modalCloseBtn: { width: 60 },
   modalCloseText: {
     fontFamily: FONTS.montserrat.medium, color: 'rgba(255,255,255,0.5)',
@@ -803,17 +932,35 @@ const storyStyles = StyleSheet.create({
   },
   previewWrap: {
     flex: 1, justifyContent: 'center', alignItems: 'center',
+    position: 'relative',
+  },
+  pickOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center',
+    zIndex: 10,
+  },
+  pickOverlayBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 24, paddingVertical: 14,
+    borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.2)',
+  },
+  pickOverlayText: {
+    fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
   },
   viewShot: {
     borderRadius: 24, overflow: 'hidden',
   },
+  actionsCol: {
+    paddingHorizontal: 20, paddingBottom: 50, paddingTop: 16,
+    width: '100%', gap: 10,
+  },
   actionsRow: {
-    flexDirection: 'row', gap: 12,
-    paddingHorizontal: 20, paddingBottom: 50, paddingTop: 20,
-    width: '100%',
+    flexDirection: 'row', gap: 10,
   },
   pickPhotoBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 14,
+    paddingVertical: 14, borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center', justifyContent: 'center',
@@ -822,13 +969,28 @@ const storyStyles = StyleSheet.create({
     fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.6)',
     fontSize: 14,
   },
+  igBtn: {
+    flex: 1, borderRadius: 18, overflow: 'hidden',
+    minHeight: 52,
+    shadowColor: '#C13584', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25, shadowRadius: 16, elevation: 8,
+  },
+  igBtnText: {
+    fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.9)', fontSize: 14,
+  },
   shareBtn: {
-    flex: 1, paddingVertical: 14, borderRadius: 14,
-    backgroundColor: '#FF6C24', alignItems: 'center', justifyContent: 'center',
-    minHeight: 48,
+    flex: 1, borderRadius: 18, overflow: 'hidden',
+    minHeight: 52,
+    shadowColor: '#FF6C24', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25, shadowRadius: 16, elevation: 8,
   },
   shareBtnText: {
-    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 14,
+    fontFamily: FONTS.montserrat.semibold, color: '#FF8540', fontSize: 14,
+  },
+  btnInner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, paddingVertical: 15, paddingHorizontal: 24,
+    zIndex: 2,
   },
 });
 
