@@ -335,8 +335,10 @@ export default function LoginScreen() {
         </Animated.View>
       ) : null}
 
-      {/* ── Logo floats over the photo ── */}
-      <Animated.View entering={FadeIn.delay(100).duration(700)} style={[styles.logoWrap, { bottom: SH * 0.50 + 6 }]} pointerEvents="none">
+      {/* ── Bottom sheet glass panel ── */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoid}>
+      {/* ── Logo — inside KAV so it moves with the sheet ── */}
+      <Animated.View entering={FadeIn.delay(100).duration(700)} style={styles.logoAboveSheet} pointerEvents="none">
         <View style={styles.logoRow}>
           <Text style={styles.logoVitta}>VITTA</Text>
           <Text style={styles.logoUp}>UP</Text>
@@ -348,8 +350,6 @@ export default function LoginScreen() {
         </Animated.View>
       </Animated.View>
 
-      {/* ── Bottom sheet glass panel ── */}
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoid}>
       <Animated.View entering={FadeInUp.delay(200).duration(700)} style={styles.bottomSheet}>
         {/* Glass background layers */}
         <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
@@ -499,8 +499,8 @@ const styles = StyleSheet.create({
   bgImage: { position: 'absolute', top: 0, left: 0, width: SW, height: SH },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 
-  // Logo — absolute positioned over photo
-  logoWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 10 },
+  // Logo — sits above bottom sheet, moves with keyboard
+  logoAboveSheet: { alignItems: 'center', marginBottom: 6 },
   logoRow: { flexDirection: 'row', alignItems: 'baseline' },
   logoVitta: {
     fontFamily: 'Montserrat_800ExtraBold', fontSize: 42, color: '#FFFFFF', letterSpacing: 1,
