@@ -339,17 +339,6 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const viewShotRef = useRef<any>(null);
   const [bgUri, setBgUri] = useState<string | null>(null);
   const [sharing, setSharing] = useState<'ig' | 'share' | 'dl' | null>(null);
-  const [dots, setDots] = useState('.');
-
-
-  // Animated dots: . → .. → ... → .
-  React.useEffect(() => {
-    if (!sharing) return;
-    const iv = setInterval(() => {
-      setDots(d => d.length >= 3 ? '.' : d + '.');
-    }, 500);
-    return () => clearInterval(iv);
-  }, [sharing]);
 
   if (!run) return null;
 
@@ -523,14 +512,6 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 
           {/* Actions */}
           <View style={storyStyles.actionsCol}>
-            {/* Loading — runner + animated dots */}
-            {sharing && (
-              <Animated.View entering={FadeIn.duration(250)} style={storyStyles.loadingFloat}>
-                <LottieView source={RUNNING_ANIM} autoPlay loop speed={1.2} style={{ width: 48, height: 48 }} />
-                <Text style={storyStyles.loadingText}>Preparando{dots}</Text>
-              </Animated.View>
-            )}
-
             <View style={storyStyles.actionsRow}>
               {/* Download — icon only */}
               <TouchableOpacity
@@ -1089,14 +1070,6 @@ const storyStyles = StyleSheet.create({
   },
   btnActive: {
     opacity: 0.5,
-  },
-  loadingFloat: {
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8,
-  },
-  loadingText: {
-    fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.6)',
-    fontSize: 13, marginTop: 2, width: 90, textAlign: 'center',
   },
 });
 
