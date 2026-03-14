@@ -87,13 +87,17 @@ export default function EditarPerfilScreen() {
 
       // Read file as base64 and upload to Supabase Storage
       let base64: string;
-      if (FileSystem) {
-        base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      if (FileSystem?.readAsStringAsync) {
+        base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
       } else {
         const response = await fetch(asset.uri);
         const blob = await response.blob();
-        const buf = await new Response(blob).arrayBuffer();
-        base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
       }
 
       const { error: uploadError } = await supabase.storage
