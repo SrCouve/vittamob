@@ -212,7 +212,6 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
   const { signInWithEmail, isLoading } = useAuthStore();
   const [errorMsg, setErrorMsg] = useState('');
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -290,7 +289,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <View style={styles.container}>
       {/* ── Full-screen background photo ── */}
       <Image source={BG_IMAGE} style={styles.bgImage} resizeMode="cover" />
 
@@ -337,7 +336,7 @@ export default function LoginScreen() {
       ) : null}
 
       {/* ── Logo floats over the photo ── */}
-      <Animated.View entering={FadeIn.delay(100).duration(700)} style={[styles.logoWrap, { bottom: SH * 0.50 + 6 }]}>
+      <Animated.View entering={FadeIn.delay(100).duration(700)} style={[styles.logoWrap, { bottom: SH * 0.50 + 6 }]} pointerEvents="none">
         <View style={styles.logoRow}>
           <Text style={styles.logoVitta}>VITTA</Text>
           <Text style={styles.logoUp}>UP</Text>
@@ -350,6 +349,7 @@ export default function LoginScreen() {
       </Animated.View>
 
       {/* ── Bottom sheet glass panel ── */}
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardAvoid}>
       <Animated.View entering={FadeInUp.delay(200).duration(700)} style={styles.bottomSheet}>
         {/* Glass background layers */}
         <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
@@ -394,7 +394,7 @@ export default function LoginScreen() {
 
           {/* Email */}
           <Text style={styles.label}>Email</Text>
-          <View style={[styles.field, focusedField === 'email' && styles.fieldFocused]}>
+          <View style={styles.field}>
             <TextInput
               style={styles.fieldInput}
               placeholder="seu@email.com"
@@ -403,14 +403,12 @@ export default function LoginScreen() {
               onChangeText={setEmail}
               autoCapitalize="none"
               keyboardType="email-address"
-              onFocus={() => setFocusedField('email')}
-              onBlur={() => setFocusedField(null)}
             />
           </View>
 
           {/* Senha */}
           <Text style={styles.label}>Senha</Text>
-          <View style={[styles.field, focusedField === 'password' && styles.fieldFocused]}>
+          <View style={styles.field}>
             <TextInput
               style={[styles.fieldInput, { paddingRight: 50 }]}
               placeholder="Digite sua senha"
@@ -418,8 +416,6 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
-              onFocus={() => setFocusedField('password')}
-              onBlur={() => setFocusedField(null)}
             />
             <TouchableOpacity
               style={styles.eyeBtn}
@@ -491,7 +487,8 @@ export default function LoginScreen() {
           </Text>
         </ScrollView>
       </Animated.View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -520,9 +517,13 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6,
   },
 
+  // KeyboardAvoidingView wraps only the bottom sheet
+  keyboardAvoid: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+  },
+
   // Bottom sheet — compact, glued to the bottom
   bottomSheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
     maxHeight: SH * 0.50,
     borderTopLeftRadius: 32, borderTopRightRadius: 32,
     overflow: 'hidden',
@@ -577,11 +578,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.25)',
     borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.07)',
     marginBottom: 12, justifyContent: 'center',
-  },
-  fieldFocused: {
-    borderColor: 'rgba(255,108,36,0.4)',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    shadowColor: '#FF6C24', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.1, shadowRadius: 12,
   },
   fieldInput: { flex: 1, paddingHorizontal: 14, color: '#fff', fontFamily: 'Montserrat_400Regular', fontSize: 15 },
   eyeBtn: { position: 'absolute', right: 4, top: 3, width: 42, height: 42, justifyContent: 'center', alignItems: 'center' },

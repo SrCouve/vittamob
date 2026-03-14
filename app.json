@@ -2,7 +2,7 @@
   "expo": {
     "name": "VITTA UP",
     "slug": "vittaup",
-    "version": "1.2.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
+      "buildNumber": "39",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {
@@ -28,7 +29,10 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -41,7 +45,28 @@
       "expo-splash-screen",
       "expo-secure-store",
       "expo-apple-authentication",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-web-browser",
+      "./plugins/withSwiftConcurrencyFix",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "fit.vittaup.app.widgets",
+          "groupIdentifier": "group.fit.vittaup.app",
+          "widgets": [
+            {
+              "name": "MetaSemanal",
+              "displayName": "Meta Semanal",
+              "description": "Acompanhe sua meta de corrida semanal",
+              "supportedFamilies": [
+                "systemSmall",
+                "systemMedium"
+              ]
+            }
+          ]
+        }
+      ],
+      "expo-sharing"
     ],
     "extra": {
       "router": {},
@@ -49,6 +74,12 @@
         "projectId": "af4b0142-d6fb-4393-a5db-b9b591984053"
       }
     },
-    "owner": "firezy"
+    "owner": "firezy",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/af4b0142-d6fb-4393-a5db-b9b591984053"
+    }
   }
 }

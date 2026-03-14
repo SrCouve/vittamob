@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { ThemeProvider, DarkTheme } from '@react-navigation/native';
@@ -20,9 +20,11 @@ import {
   PlayfairDisplay_700Bold,
 } from '@expo-google-fonts/playfair-display';
 import { BackgroundOrbs } from '../src/components/BackgroundOrbs';
+import { SplashTransition } from '../src/components/SplashTransition';
 import { useAuthStore } from '../src/stores/authStore';
 import { useUserStore } from '../src/stores/userStore';
 import { usePointsStore } from '../src/stores/pointsStore';
+import { useStravaStore } from '../src/stores/stravaStore';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -45,6 +47,8 @@ export default function RootLayout() {
   const { session, isInitialized, initialize } = useAuthStore();
   const { fetchProfile } = useUserStore();
   const { fetchBalance } = usePointsStore();
+  const { checkConnection } = useStravaStore();
+  const [showSplash, setShowSplash] = useState(true);
 
   const [fontsLoaded] = useFonts({
     Montserrat_300Light,
@@ -68,6 +72,7 @@ export default function RootLayout() {
     if (session?.user) {
       fetchProfile(session.user.id);
       fetchBalance(session.user.id);
+      checkConnection(session.user.id);
     }
   }, [session?.user?.id]);
 
@@ -105,6 +110,7 @@ export default function RootLayout() {
         />
         <BackgroundOrbs />
         <StatusBar style="light" translucent backgroundColor="transparent" />
+        {showSplash && <SplashTransition onFinish={() => setShowSplash(false)} />}
         <Stack
           screenOptions={{
             headerShown: false,

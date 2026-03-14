@@ -7,6 +7,8 @@ interface Profile {
   avatar_url: string | null;
   bio: string | null;
   interests: string[];
+  weight_kg: number | null;
+  height_cm: number | null;
   points_balance: number;
   streak_days: number;
   total_lessons: number;

@@ -11,6 +11,7 @@ import { Logo } from '../../src/components/Logo';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { GlassCard } from '../../src/components/GlassCard';
 import { FONTS, COLORS } from '../../src/constants/theme';
+import { useUserStore } from '../../src/stores/userStore';
 import Svg2, { Path, Polyline, Polygon } from 'react-native-svg';
 
 const isWeb = Platform.OS === 'web';
@@ -71,6 +72,8 @@ function ChevronRight({ size = 14 }: { size?: number }) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useScrollY();
+  const { profile } = useUserStore();
+  const firstName = profile?.name?.split(' ')[0] ?? 'Usuário';
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -90,7 +93,7 @@ export default function HomeScreen() {
       <Animated.View entering={FadeInDown.duration(500)} style={styles.header}>
         <View>
           <Logo variant="gradient" size="sm" />
-          <Text style={styles.greeting}>Olá, Kaio</Text>
+          <Text style={styles.greeting}>Olá, {firstName}</Text>
         </View>
         <TouchableOpacity onPress={() => router.push('/(tabs)/perfil')} style={styles.avatar}>
           <LinearGradient colors={['#FF6C24', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />

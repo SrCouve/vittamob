@@ -39,6 +39,8 @@ export default function EditarPerfilScreen() {
   const { user } = useAuthStore();
   const [name, setName] = useState(profile?.name ?? '');
   const [bio, setBio] = useState(profile?.bio ?? '');
+  const [weight, setWeight] = useState(profile?.weight_kg ? String(profile.weight_kg) : '');
+  const [height, setHeight] = useState(profile?.height_cm ? String(profile.height_cm) : '');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? null);
@@ -47,6 +49,8 @@ export default function EditarPerfilScreen() {
     if (profile) {
       setName(profile.name ?? '');
       setBio(profile.bio ?? '');
+      setWeight(profile.weight_kg ? String(profile.weight_kg) : '');
+      setHeight(profile.height_cm ? String(profile.height_cm) : '');
       setAvatarUrl(profile.avatar_url ?? null);
     }
   }, [profile]);
@@ -116,9 +120,14 @@ export default function EditarPerfilScreen() {
     }
 
     setIsSaving(true);
+    const weightNum = weight ? parseFloat(weight.replace(',', '.')) : null;
+    const heightNum = height ? parseInt(height, 10) : null;
+
     const { error } = await updateProfile({
       name: name.trim(),
       bio: bio.trim() || null,
+      weight_kg: weightNum && weightNum > 0 ? weightNum : null,
+      height_cm: heightNum && heightNum > 0 ? heightNum : null,
     });
 
     if (error) {
@@ -203,6 +212,35 @@ export default function EditarPerfilScreen() {
             />
           </View>
 
+          <View style={styles.rowFields}>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>Peso (kg)</Text>
+              <View style={styles.field}>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={weight}
+                  onChangeText={setWeight}
+                  placeholder="Ex: 72.5"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>Altura (cm)</Text>
+              <View style={styles.field}>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={height}
+                  onChangeText={setHeight}
+                  placeholder="Ex: 175"
+                  placeholderTextColor="rgba(255,255,255,0.2)"
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+          </View>
+
           <Text style={styles.label}>Email</Text>
           <View style={[styles.field, styles.disabledField]}>
             <Text style={styles.disabledText}>{user?.email ?? ''}</Text>
@@ -273,6 +311,8 @@ const styles = StyleSheet.create({
   fieldInput: { paddingHorizontal: 16, paddingVertical: 12, color: '#fff', fontFamily: 'Montserrat_400Regular', fontSize: 15 },
   bioField: { minHeight: 90 },
   bioInput: { minHeight: 70, textAlignVertical: 'top' },
+  rowFields: { flexDirection: 'row', gap: 12 },
+  halfField: { flex: 1 },
   disabledField: { backgroundColor: 'rgba(0,0,0,0.15)' },
   disabledText: { paddingHorizontal: 16, fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.3)', fontSize: 15 },
 

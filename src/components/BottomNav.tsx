@@ -33,7 +33,7 @@ const SPRING_FAST = { damping: 22, stiffness: 400, mass: 0.7 };
 const tabs = [
   { href: '/(tabs)', label: 'Início', icon: 'home' },
   { href: '/(tabs)/modulos', label: 'Módulos', icon: 'grid' },
-  { href: '/(tabs)/aulas', label: 'Aulas', icon: 'play' },
+  { href: '/(tabs)/comunidade', label: 'Social', icon: 'users' },
   { href: '/(tabs)/perfil', label: 'Perfil', icon: 'user' },
 ];
 
@@ -63,11 +63,13 @@ function TabIcon({ name, active, size = 21 }: { name: string; active: boolean; s
             <Rect x="3" y="14" width="7" height="7" />
           </Svg>
         );
-      case 'play':
+      case 'users':
         return (
           <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
-            <Circle cx="12" cy="12" r="10" />
-            <Path d="m10 8 6 4-6 4z" />
+            <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <Circle cx="9" cy="7" r="4" />
+            <Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </Svg>
         );
       case 'user':
