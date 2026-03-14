@@ -15,11 +15,14 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
-      "buildNumber": "39",
+      "buildNumber": "43",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {
         "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["instagram-stories", "instagram"]
       }
     },
     "android": {

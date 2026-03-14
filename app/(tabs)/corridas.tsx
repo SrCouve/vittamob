@@ -422,20 +422,7 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
         if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
       }
 
-      // Try react-native-share direct to IG Stories
-      if (RNShare) {
-        try {
-          await RNShare.shareSingle({
-            social: 'instagramstories' as any,
-            backgroundImage: uri,
-            type: 'image/png',
-          });
-          setSharing(null);
-          return;
-        } catch {}
-      }
-
-      // Fallback: share sheet
+      // Share via share sheet — user picks Instagram Stories from there
       if (Sharing && await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.image' });
       } else {
