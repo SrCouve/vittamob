@@ -422,7 +422,22 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
         if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
       }
 
-      // Share via share sheet — user picks Instagram Stories from there
+      // Direct to Instagram Stories via react-native-share
+      if (RNShare) {
+        try {
+          await RNShare.shareSingle({
+            social: 'instagramstories' as any,
+            backgroundImage: uri,
+            appId: '1460591989058844',
+          });
+          setSharing(null);
+          return;
+        } catch (e) {
+          console.warn('Direct IG Stories failed, falling back to share sheet:', e);
+        }
+      }
+
+      // Fallback: share sheet
       if (Sharing && await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.image' });
       } else {
@@ -513,27 +528,30 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
             <View style={{ width: 60 }} />
           </View>
 
-          {/* Preview — RecordingView wraps for video download, ViewShot always inside */}
+          {/* Preview */}
           <View style={storyStyles.previewWrap}>
-            {recorder && RecordingViewComp ? (
-              <RecordingViewComp sessionId={recorder.sessionId} style={storyStyles.viewShot}>
-                {ViewShot ? (
-                  <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ flex: 1 }}>
+            {/* Visual rounded wrapper — only for display, not captured */}
+            <View style={storyStyles.previewRounded}>
+              {recorder && RecordingViewComp ? (
+                <RecordingViewComp sessionId={recorder.sessionId} style={{ width: STORY_W, height: STORY_H }}>
+                  {ViewShot ? (
+                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
+                      <StoryCard run={run} bgUri={bgUri} />
+                    </ViewShot>
+                  ) : (
                     <StoryCard run={run} bgUri={bgUri} />
-                  </ViewShot>
-                ) : (
+                  )}
+                </RecordingViewComp>
+              ) : ViewShot ? (
+                <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
                   <StoryCard run={run} bgUri={bgUri} />
-                )}
-              </RecordingViewComp>
-            ) : ViewShot ? (
-              <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={storyStyles.viewShot}>
-                <StoryCard run={run} bgUri={bgUri} />
-              </ViewShot>
-            ) : (
-              <View style={storyStyles.viewShot}>
-                <StoryCard run={run} bgUri={bgUri} />
-              </View>
-            )}
+                </ViewShot>
+              ) : (
+                <View style={{ width: STORY_W, height: STORY_H }}>
+                  <StoryCard run={run} bgUri={bgUri} />
+                </View>
+              )}
+            </View>
             {/* Photo picker overlay */}
             {!bgUri && (
               <TouchableOpacity onPress={pickPhoto} style={storyStyles.pickOverlay} activeOpacity={0.7}>
@@ -1065,7 +1083,7 @@ const storyStyles = StyleSheet.create({
     fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.85)',
     fontSize: 15,
   },
-  viewShot: {
+  previewRounded: {
     borderRadius: 24, overflow: 'hidden',
   },
   actionsCol: {
