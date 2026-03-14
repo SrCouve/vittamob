@@ -512,9 +512,11 @@ export const useStravaStore = create<StravaState>((set, get) => ({
 
       if (!profile) return;
 
-      const signupEpoch = Math.floor(new Date(profile.created_at).getTime() / 1000);
+      // Pull runs from 2 days before account creation so users who ran recently get credit
+      const TWO_DAYS = 2 * 24 * 60 * 60;
+      const signupEpoch = Math.floor(new Date(profile.created_at).getTime() / 1000) - TWO_DAYS;
 
-      // Fetch activities after signup (paginated, max 200)
+      // Fetch activities after signup-2d (paginated, max 200)
       const res = await fetch(
         `${STRAVA_API}/athlete/activities?after=${signupEpoch}&per_page=200`,
         { headers: { Authorization: `Bearer ${token}` } }
