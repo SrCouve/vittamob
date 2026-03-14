@@ -38,20 +38,11 @@ let Sharing: any = null;
 let ViewShot: any = null;
 let MediaLibrary: any = null;
 let RNShare: any = null;
-let FileSystem: any = null;
-let RecordingViewComp: any = null;
-let useViewRecorderHook: (() => any) | null = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 try { Sharing = require('expo-sharing'); } catch {}
 try { ViewShot = require('react-native-view-shot').default; } catch {}
 try { MediaLibrary = require('expo-media-library'); } catch {}
 try { RNShare = require('react-native-share').default; } catch {}
-try { FileSystem = require('expo-file-system'); } catch {}
-try {
-  const vr = require('react-native-view-recorder');
-  RecordingViewComp = vr.RecordingView;
-  useViewRecorderHook = vr.useViewRecorder;
-} catch {}
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -350,8 +341,6 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const [sharing, setSharing] = useState<'ig' | 'share' | 'dl' | null>(null);
   const [dots, setDots] = useState('.');
 
-  // Video recorder — only used for download button
-  const recorder = useViewRecorderHook ? useViewRecorderHook() : null;
 
   // Animated dots: . → .. → ... → .
   React.useEffect(() => {
@@ -470,38 +459,14 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const handleDownload = async () => {
     setSharing('dl');
     try {
-      let uri: string | null = null;
-      let isVideo = false;
-
-      // Try video recording first (4s animated clip)
-      if (recorder && RecordingViewComp && FileSystem) {
-        try {
-          const output = FileSystem.cacheDirectory + `story_${Date.now()}.mp4`;
-          const recordPromise = recorder.record({
-            output,
-            fps: 30,
-            codec: 'h264',
-            width: Math.round(STORY_W * 2),
-            height: Math.round(STORY_H * 2),
-          });
-          await new Promise(r => setTimeout(r, 4000));
-          recorder.stop();
-          uri = await recordPromise;
-          isVideo = true;
-        } catch (e) {
-          console.warn('Video recording failed, saving image instead:', e);
-        }
-      }
-
-      // Fallback: static image
-      if (!uri) uri = await captureMedia();
+      const uri = await captureMedia();
       if (!uri) { Alert.alert('Erro', 'Não foi possível capturar.'); setSharing(null); return; }
 
       if (MediaLibrary) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
         if (status === 'granted') {
           await MediaLibrary.saveToLibraryAsync(uri);
-          Alert.alert('Salvo!', isVideo ? 'Vídeo salvo na sua galeria!' : 'Imagem salva na sua galeria.');
+          Alert.alert('Salvo!', 'Imagem salva na sua galeria.');
         } else {
           Alert.alert('Permissão', 'Permita o acesso à galeria para salvar.');
         }
@@ -532,17 +497,7 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
           <View style={storyStyles.previewWrap}>
             {/* Visual rounded wrapper — only for display, not captured */}
             <View style={storyStyles.previewRounded}>
-              {recorder && RecordingViewComp ? (
-                <RecordingViewComp sessionId={recorder.sessionId} style={{ width: STORY_W, height: STORY_H }}>
-                  {ViewShot ? (
-                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
-                      <StoryCard run={run} bgUri={bgUri} />
-                    </ViewShot>
-                  ) : (
-                    <StoryCard run={run} bgUri={bgUri} />
-                  )}
-                </RecordingViewComp>
-              ) : ViewShot ? (
+              {ViewShot ? (
                 <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
                   <StoryCard run={run} bgUri={bgUri} />
                 </ViewShot>
