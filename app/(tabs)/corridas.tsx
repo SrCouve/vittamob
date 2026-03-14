@@ -382,11 +382,12 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
     }
   };
 
-  // Record 4s video of the animated StoryCard
-  const recordVideo = async (): Promise<string | null> => {
+  // Record 4s video or fallback to static image
+  const captureMedia = async (): Promise<string | null> => {
     if (videoUriRef.current) return videoUriRef.current;
 
-    if (recorder && FileSystem) {
+    // Try video recording first
+    if (recorder && RecordingViewComp && FileSystem) {
       try {
         const output = FileSystem.cacheDirectory + `story_${Date.now()}.mp4`;
         const recordPromise = recorder.record({
@@ -396,21 +397,25 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
           width: Math.round(STORY_W * 2),
           height: Math.round(STORY_H * 2),
         });
-        // Let animations play for 4 seconds then stop
         await new Promise(r => setTimeout(r, 4000));
         recorder.stop();
         const uri = await recordPromise;
         videoUriRef.current = uri;
         return uri;
       } catch (e) {
-        console.warn('Video recording failed, falling back to image', e);
+        console.warn('Video recording failed:', e);
       }
     }
 
-    // Fallback: capture static image
+    // Fallback: static image via ViewShot
     if (viewShotRef.current?.capture) {
-      return await viewShotRef.current.capture();
+      try {
+        return await viewShotRef.current.capture();
+      } catch (e) {
+        console.warn('ViewShot capture failed:', e);
+      }
     }
+
     return null;
   };
 
@@ -419,8 +424,8 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const handleStories = async () => {
     setSharing('ig');
     try {
-      const uri = await recordVideo();
-      if (!uri) { setSharing(null); return; }
+      const uri = await captureMedia();
+      if (!uri) { Alert.alert('Erro', 'Não foi possível capturar a imagem.'); setSharing(null); return; }
 
       // Save to gallery
       if (MediaLibrary) {
@@ -457,8 +462,8 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const handleShare = async () => {
     setSharing('share');
     try {
-      const uri = await recordVideo();
-      if (!uri) { setSharing(null); return; }
+      const uri = await captureMedia();
+      if (!uri) { Alert.alert('Erro', 'Não foi possível capturar a imagem.'); setSharing(null); return; }
 
       if (MediaLibrary) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -480,8 +485,8 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const handleDownload = async () => {
     setSharing('dl');
     try {
-      const uri = await recordVideo();
-      if (!uri) { setSharing(null); return; }
+      const uri = await captureMedia();
+      if (!uri) { Alert.alert('Erro', 'Não foi possível capturar a imagem.'); setSharing(null); return; }
 
       if (MediaLibrary) {
         const { status } = await MediaLibrary.requestPermissionsAsync();
@@ -502,9 +507,7 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
     onClose();
   };
 
-  // Choose the recording wrapper
-  const RecWrapper = RecordingViewComp || View;
-  const recWrapperProps = recorder ? { sessionId: recorder.sessionId } : {};
+  // Wrapper for recording
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
@@ -519,17 +522,27 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
             <View style={{ width: 60 }} />
           </View>
 
-          {/* Preview — RecordingView wraps for video, ViewShot for fallback */}
+          {/* Preview — ViewShot always mounted for fallback, RecordingView wraps if available */}
           <View style={storyStyles.previewWrap}>
-            <RecWrapper {...recWrapperProps} style={storyStyles.viewShot}>
-              {ViewShot && !recorder ? (
-                <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ flex: 1 }}>
+            {recorder && RecordingViewComp ? (
+              <RecordingViewComp sessionId={recorder.sessionId} style={storyStyles.viewShot}>
+                {ViewShot ? (
+                  <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ flex: 1 }}>
+                    <StoryCard run={run} bgUri={bgUri} />
+                  </ViewShot>
+                ) : (
                   <StoryCard run={run} bgUri={bgUri} />
-                </ViewShot>
-              ) : (
+                )}
+              </RecordingViewComp>
+            ) : ViewShot ? (
+              <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={storyStyles.viewShot}>
                 <StoryCard run={run} bgUri={bgUri} />
-              )}
-            </RecWrapper>
+              </ViewShot>
+            ) : (
+              <View style={storyStyles.viewShot}>
+                <StoryCard run={run} bgUri={bgUri} />
+              </View>
+            )}
             {/* Photo picker overlay */}
             {!bgUri && (
               <TouchableOpacity onPress={pickPhoto} style={storyStyles.pickOverlay} activeOpacity={0.7}>

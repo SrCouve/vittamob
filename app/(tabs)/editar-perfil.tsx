@@ -10,7 +10,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Svg, { Path, Circle, Polyline } from 'react-native-svg';
 let ImagePicker: any = null;
+let FileSystem: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
+try { FileSystem = require('expo-file-system'); } catch {}
+import { decode } from 'base64-arraybuffer';
 import { GlassCard } from '../../src/components/GlassCard';
 import { useUserStore } from '../../src/stores/userStore';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -81,14 +84,20 @@ export default function EditarPerfilScreen() {
       const ext = asset.uri.split('.').pop() ?? 'jpg';
       const fileName = `${user?.id}/avatar.${ext}`;
 
-      // Upload to Supabase Storage
-      const response = await fetch(asset.uri);
-      const blob = await response.blob();
-      const arrayBuffer = await new Response(blob).arrayBuffer();
+      // Read file as base64 and upload to Supabase Storage
+      let base64: string;
+      if (FileSystem) {
+        base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      } else {
+        const response = await fetch(asset.uri);
+        const blob = await response.blob();
+        const buf = await new Response(blob).arrayBuffer();
+        base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      }
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, arrayBuffer, {
+        .upload(fileName, decode(base64), {
           contentType: `image/${ext}`,
           upsert: true,
         });
@@ -104,7 +113,7 @@ export default function EditarPerfilScreen() {
         .from('avatars')
         .getPublicUrl(fileName);
 
-      const newUrl = urlData.publicUrl;
+      const newUrl = `${urlData.publicUrl}?t=${Date.now()}`;
       setAvatarUrl(newUrl);
       await updateProfile({ avatar_url: newUrl });
     } catch (e) {
