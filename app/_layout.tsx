@@ -25,8 +25,15 @@ import { useAuthStore } from '../src/stores/authStore';
 import { useUserStore } from '../src/stores/userStore';
 import { usePointsStore } from '../src/stores/pointsStore';
 import { useStravaStore } from '../src/stores/stravaStore';
+import {
+  setupNotificationHandler,
+  registerPushToken,
+  onNotificationTap,
+  clearBadge,
+} from '../src/lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
+setupNotificationHandler();
 
 const VittaTheme = {
   ...DarkTheme,
@@ -67,14 +74,34 @@ export default function RootLayout() {
     initialize();
   }, []);
 
-  // Fetch profile + points when user logs in
+  // Fetch profile + points + register push when user logs in
   useEffect(() => {
     if (session?.user) {
       fetchProfile(session.user.id);
       fetchBalance(session.user.id);
       checkConnection(session.user.id);
+      registerPushToken(session.user.id);
+      clearBadge();
     }
   }, [session?.user?.id]);
+
+  // Handle notification taps → deep link
+  useEffect(() => {
+    const cleanup = onNotificationTap((data) => {
+      if (data?.type === 'follow' && data?.follower_id) {
+        router.push(`/user/${data.follower_id}` as any);
+      } else if (data?.type === 'follow_request' && data?.requester_id) {
+        router.push('/social/requests' as any);
+      } else if (data?.type === 'follow_accepted' && data?.user_id) {
+        router.push(`/user/${data.user_id}` as any);
+      } else if (data?.type === 'friend' && data?.follower_id) {
+        router.push(`/user/${data.follower_id}` as any);
+      } else {
+        router.push('/(tabs)/comunidade' as any);
+      }
+    });
+    return cleanup;
+  }, []);
 
   // Hide splash when ready
   useEffect(() => {

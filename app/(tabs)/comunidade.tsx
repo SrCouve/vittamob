@@ -33,12 +33,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Path, Circle as SvgCircle, Polyline, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
+import { useRouter } from 'expo-router';
 import { Logo } from '../../src/components/Logo';
 import { GlassCard } from '../../src/components/GlassCard';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { useAuthStore } from '../../src/stores/authStore';
-import { useCommunityStore, type CommunityPost, type PostType, type TopMember } from '../../src/stores/communityStore';
+import { useUserStore } from '../../src/stores/userStore';
+import { useCommunityStore, type CommunityPost, type PostType, type TopMember, type FeedFilter } from '../../src/stores/communityStore';
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -58,7 +60,7 @@ const CELEBRATION_ANIM = require('../../assets/celebration.json');
 const THUNDER_ANIM = require('../../assets/thunder-energia.json');
 
 // ─── Filter Tabs ─────────────────────────────────────────────────
-type FeedFilter = 'all' | 'conquistas' | 'desafios' | 'fotos';
+// FeedFilter type is now imported from communityStore
 
 // ─── Icons ───────────────────────────────────────────────────────
 
@@ -209,13 +211,33 @@ function matchesFilter(post: CommunityPost, filter: FeedFilter): boolean {
 
 // ─── Avatar Component ────────────────────────────────────────────
 
-function UserAvatar({ name, size = 36, ring = false }: { name: string; size?: number; ring?: boolean }) {
+function UserAvatar({ name, avatarUrl, size = 36, ring = false }: { name: string; avatarUrl?: string | null; size?: number; ring?: boolean }) {
   const colors: [string, string][] = [
     ['#FF6C24', '#FFAC7D'],
     ['#FF8540', '#FF6C24'],
     ['#FFAC7D', '#FF8540'],
   ];
   const colorIndex = name.charCodeAt(0) % colors.length;
+
+  const renderInner = (extraStyle?: any) => {
+    if (avatarUrl) {
+      return (
+        <View style={[s.avatar, { width: size, height: size, borderRadius: size / 2 }, extraStyle]}>
+          <Image source={{ uri: avatarUrl }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+        </View>
+      );
+    }
+    return (
+      <LinearGradient
+        colors={colors[colorIndex]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[s.avatar, { width: size, height: size, borderRadius: size / 2 }, extraStyle]}
+      >
+        <Text style={[s.avatarText, { fontSize: size * 0.32 }]}>{getInitials(name)}</Text>
+      </LinearGradient>
+    );
+  };
 
   if (ring) {
     const outerSize = size + 4;
@@ -227,35 +249,19 @@ function UserAvatar({ name, size = 36, ring = false }: { name: string; size?: nu
           end={{ x: 1, y: 1 }}
           style={[StyleSheet.absoluteFill, { borderRadius: outerSize / 2 }]}
         />
-        <LinearGradient
-          colors={colors[colorIndex]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[s.avatar, { width: size, height: size, borderRadius: size / 2, borderWidth: 1.5, borderColor: '#0D0D0D' }]}
-        >
-          <Text style={[s.avatarText, { fontSize: size * 0.32 }]}>{getInitials(name)}</Text>
-        </LinearGradient>
+        {renderInner({ borderWidth: 1.5, borderColor: '#0D0D0D' })}
       </View>
     );
   }
 
-  return (
-    <LinearGradient
-      colors={colors[colorIndex]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={[s.avatar, { width: size, height: size, borderRadius: size / 2 }]}
-    >
-      <Text style={[s.avatarText, { fontSize: size * 0.32 }]}>{getInitials(name)}</Text>
-    </LinearGradient>
-  );
+  return renderInner();
 }
 
 // ─── Weekly Highlight / Top Members ──────────────────────────────
 // Backend: query profiles ORDER BY points_balance DESC LIMIT 5
 // For now uses data from the community posts (most energia)
 
-function TopMembersSection({ members }: { members: TopMember[] }) {
+function TopMembersSection({ members, onMemberPress }: { members: TopMember[]; onMemberPress: (userId: string) => void }) {
   if (members.length === 0) return null;
 
   return (
@@ -266,7 +272,7 @@ function TopMembersSection({ members }: { members: TopMember[] }) {
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.topScroll}>
         {members.map((u, i) => (
-          <View key={u.user_id} style={s.topCard}>
+          <TouchableOpacity key={u.user_id} style={s.topCard} activeOpacity={0.7} onPress={() => onMemberPress(u.user_id)}>
             {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
             <LinearGradient
               colors={i === 0 ? ['rgba(255,108,36,0.14)', 'rgba(255,108,36,0.04)'] : ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
@@ -287,7 +293,7 @@ function TopMembersSection({ members }: { members: TopMember[] }) {
                 <Text style={[s.rankText, i === 0 && s.rankTextFirst]}>#{i + 1}</Text>
               </View>
             )}
-            <UserAvatar name={u.user_name} size={40} ring={i === 0} />
+            <UserAvatar name={u.user_name} avatarUrl={u.avatar_url} size={40} ring={i === 0} />
             <Text style={s.topName} numberOfLines={1}>{u.user_name.split(' ')[0]}</Text>
             {u.weekly_km > 0 && (
               <Text style={s.topKm}>{u.weekly_km.toFixed(1)} km</Text>
@@ -296,7 +302,7 @@ function TopMembersSection({ members }: { members: TopMember[] }) {
               <EnergiaIcon size={12} active />
               <Text style={s.topStatValue}>{u.weekly_energia}</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         ))}
       </ScrollView>
     </Animated.View>
@@ -363,6 +369,7 @@ function PostCard({
   onToggleEnergia,
   onOpenComments,
   onDelete,
+  onUserPress,
   index,
 }: {
   post: CommunityPost;
@@ -370,6 +377,7 @@ function PostCard({
   onToggleEnergia: (postId: string) => void;
   onOpenComments: (postId: string) => void;
   onDelete: (postId: string) => void;
+  onUserPress: (userId: string) => void;
   index: number;
 }) {
   const isAutoPost = post.type !== 'text';
@@ -460,10 +468,14 @@ function PostCard({
 
       {/* Header */}
       <View style={s.postHeader}>
-        <UserAvatar name={post.user_name} size={38} />
+        <TouchableOpacity activeOpacity={0.7} onPress={() => onUserPress(post.user_id)}>
+          <UserAvatar name={post.user_name} avatarUrl={post.user_avatar} size={38} />
+        </TouchableOpacity>
         <View style={s.postHeaderText}>
           <View style={s.postNameRow}>
-            <Text style={s.postUserName}>{post.user_name}</Text>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => onUserPress(post.user_id)}>
+              <Text style={s.postUserName}>{post.user_name}</Text>
+            </TouchableOpacity>
             {isAutoPost && (
               <View style={[s.postTypeBadge, isBigAchievement && s.postTypeBadgeBig]}>
                 {post.type === 'lesson_complete' && <CheckCircleIcon size={11} color="#FF8540" />}
@@ -475,14 +487,23 @@ function PostCard({
           </View>
           <Text style={s.postTime}>{timeAgo(post.created_at)}</Text>
         </View>
-        {/* Delete button — only for post owner */}
+        {/* Menu — only for post owner */}
         {userId && post.user_id === userId && (
           <TouchableOpacity
-            onPress={() => onDelete(post.id)}
+            onPress={() => {
+              Alert.alert('Post', '', [
+                { text: 'Excluir post', style: 'destructive', onPress: () => onDelete(post.id) },
+                { text: 'Cancelar', style: 'cancel' },
+              ]);
+            }}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={s.deleteBtn}
           >
-            <TrashIcon size={15} />
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="rgba(255,255,255,0.35)">
+              <SvgCircle cx="12" cy="5" r="2" />
+              <SvgCircle cx="12" cy="12" r="2" />
+              <SvgCircle cx="12" cy="19" r="2" />
+            </Svg>
           </TouchableOpacity>
         )}
       </View>
@@ -612,7 +633,7 @@ function CommentsSection({
   userId: string | null;
   onClose: () => void;
 }) {
-  const { comments, fetchComments, addComment } = useCommunityStore();
+  const { comments, fetchComments, addComment, deleteComment } = useCommunityStore();
   const [text, setText] = useState('');
   const cache = comments[postId];
   const postComments = cache?.items ?? [];
@@ -666,13 +687,31 @@ function CommentsSection({
         )}
         {postComments.map((c) => (
           <View key={c.id} style={s.commentRow}>
-            <UserAvatar name={c.user_name} size={28} />
+            <UserAvatar name={c.user_name} avatarUrl={c.user_avatar} size={28} />
             <View style={s.commentContent}>
               <Text style={s.commentMsg}>
                 <Text style={s.commentName}>{c.user_name}</Text> {c.content}
               </Text>
               <Text style={s.commentTime}>{timeAgo(c.created_at)}</Text>
             </View>
+            {userId && c.user_id === userId && (
+              <TouchableOpacity
+                onPress={() => {
+                  Alert.alert('Comentário', '', [
+                    { text: 'Excluir', style: 'destructive', onPress: () => deleteComment(c.id, postId, userId) },
+                    { text: 'Cancelar', style: 'cancel' },
+                  ]);
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ padding: 4 }}
+              >
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="rgba(255,255,255,0.25)">
+                  <SvgCircle cx="12" cy="5" r="1.5" />
+                  <SvgCircle cx="12" cy="12" r="1.5" />
+                  <SvgCircle cx="12" cy="19" r="1.5" />
+                </Svg>
+              </TouchableOpacity>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -704,7 +743,7 @@ function CommentsSection({
 
 // ─── Compose Post ────────────────────────────────────────────────
 
-function ComposeBox({ userId, userName }: { userId: string | null; userName: string }) {
+function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; userName: string; userAvatar?: string | null }) {
   const [text, setText] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const { createPost, isPosting } = useCommunityStore();
@@ -765,7 +804,7 @@ function ComposeBox({ userId, userName }: { userId: string | null; userName: str
       )}
 
       <View style={s.composeRow}>
-        <UserAvatar name={userName} size={34} />
+        <UserAvatar name={userName} avatarUrl={userAvatar} size={34} />
         <TextInput
           value={text}
           onChangeText={setText}
@@ -891,21 +930,43 @@ function EmptyFeed() {
 export default function ComunidadeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useScrollY();
-  const { user } = useAuthStore();
-  const { posts, topMembers, isLoading, fetchPosts, loadMorePosts, toggleEnergia, deletePost, fetchTopMembers } = useCommunityStore();
+  const router = useRouter();
+  const { user, session } = useAuthStore();
+  const { posts, topMembers, isLoading, feedFilter, setFeedFilter, fetchPosts, loadMorePosts, toggleEnergia, deletePost, fetchTopMembers } = useCommunityStore();
   const [activeComments, setActiveComments] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<FeedFilter>('all');
+  // filter state is now managed in communityStore (feedFilter + setFeedFilter)
+  const filter = feedFilter;
+  const setFilter = useCallback((f: FeedFilter) => {
+    setFeedFilter(f);
+  }, [setFeedFilter]);
 
+  const { profile } = useUserStore();
   const userId = user?.id ?? null;
-  const userName = user?.user_metadata?.name ?? 'Usuário';
 
-  const filteredPosts = posts.filter((p) => matchesFilter(p, filter));
+  const handleUserPress = useCallback((targetUserId: string) => {
+    if (targetUserId === session?.user?.id) {
+      router.push('/(tabs)/perfil' as any);
+    } else {
+      router.push(`/user/${targetUserId}` as any);
+    }
+  }, [session?.user?.id, router]);
+  const userName = profile?.name ?? user?.user_metadata?.name ?? 'Usuário';
+  const userAvatar = profile?.avatar_url ?? null;
+
+  // Server-side filtering: posts are already filtered by the RPC
+  // Keep client-side matchesFilter as fallback for legacy queries
+  const filteredPosts = posts;
 
   useEffect(() => {
     fetchPosts();
     fetchTopMembers();
   }, []);
+
+  // Re-fetch when filter changes (server-side filtering)
+  useEffect(() => {
+    fetchPosts(true);
+  }, [feedFilter]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -972,17 +1033,27 @@ export default function ComunidadeScreen() {
             <Logo variant="gradient" size="sm" />
             <Text style={s.subtitle}>Comunidade</Text>
           </View>
+          <TouchableOpacity
+            style={s.searchBtn}
+            activeOpacity={0.7}
+            onPress={() => router.push('/social/search' as any)}
+          >
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <SvgCircle cx="11" cy="11" r="8" />
+              <Path d="m21 21-4.3-4.3" />
+            </Svg>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* ══ STATS BANNER ══ */}
         {posts.length > 0 && <CommunityStatsBanner posts={posts} />}
 
         {/* ══ TOP MEMBERS ══ */}
-        {topMembers.length > 0 && <TopMembersSection members={topMembers} />}
+        {topMembers.length > 0 && <TopMembersSection members={topMembers} onMemberPress={handleUserPress} />}
 
         {/* ══ COMPOSE ══ */}
         <Animated.View entering={FadeInDown.delay(150).duration(500)}>
-          <ComposeBox userId={userId} userName={userName} />
+          <ComposeBox userId={userId} userName={userName} userAvatar={userAvatar} />
         </Animated.View>
 
         {/* ══ FILTER TABS ══ */}
@@ -1017,6 +1088,7 @@ export default function ComunidadeScreen() {
                   onToggleEnergia={handleEnergia}
                   onOpenComments={(id) => setActiveComments(activeComments === id ? null : id)}
                   onDelete={handleDelete}
+                  onUserPress={handleUserPress}
                   index={i}
                 />
                 {activeComments === post.id && (
@@ -1040,6 +1112,12 @@ const s = StyleSheet.create({
   // Header
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   subtitle: { fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.4)', fontSize: 14, marginTop: 4 },
+  searchBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)',
+  },
 
   // Section headers
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },

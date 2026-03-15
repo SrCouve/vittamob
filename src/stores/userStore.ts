@@ -14,6 +14,9 @@ interface Profile {
   total_lessons: number;
   total_hours: number;
   subscription_tier: 'free' | 'plus' | 'pro';
+  is_private: boolean;
+  followers_count: number;
+  following_count: number;
   created_at: string;
 }
 

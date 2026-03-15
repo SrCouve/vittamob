@@ -3,6 +3,11 @@ INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 VALUES ('avatars', 'avatars', true, 5242880, ARRAY['image/jpeg', 'image/png', 'image/webp'])
 ON CONFLICT (id) DO NOTHING;
 
+-- Drop existing policies to avoid conflicts, then recreate
+DROP POLICY IF EXISTS "Users upload own avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Users update own avatars" ON storage.objects;
+DROP POLICY IF EXISTS "Public read avatars" ON storage.objects;
+
 -- Authenticated users can upload to their own folder
 CREATE POLICY "Users upload own avatars" ON storage.objects
   FOR INSERT WITH CHECK (

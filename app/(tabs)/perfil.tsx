@@ -8,13 +8,14 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Svg, { Path, Circle, Polyline, Line, Rect } from 'react-native-svg';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { GlassCard } from '../../src/components/GlassCard';
 import LottieView from 'lottie-react-native';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUserStore } from '../../src/stores/userStore';
 import { useStravaStore, STRAVA_CLIENT_ID } from '../../src/stores/stravaStore';
-import { CorridasContent } from './corridas';
+import { useSocialStore } from '../../src/stores/socialStore';
+import { CorridasContent, RecordsContent } from './corridas';
 
 // Lazy-load native modules (not available in Expo Go)
 let AuthSession: typeof import('expo-auth-session') | null = null;
@@ -130,7 +131,7 @@ const stravaDiscovery = {
 };
 
 // ── Profile Tab Types ──
-type ProfileTab = 'perfil' | 'corridas';
+type ProfileTab = 'perfil' | 'corridas' | 'records';
 
 function SparkIcon({ size = 14, color = '#FF6C24' }: { size?: number; color?: string }) {
   return (
@@ -148,15 +149,28 @@ export default function PerfilScreen() {
   const strava = useStravaStore();
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('perfil');
+  const { myFollowersCount, myFollowingCount, myFriendsCount, fetchMyCounts, followRequestsCount, fetchFollowRequests } = useSocialStore();
 
   const displayName = profile?.name ?? 'Usuário';
   const initial = displayName.charAt(0).toUpperCase();
   const bio = profile?.bio ?? 'Membro VITTA UP';
 
-  // Social stats (placeholder until social feature is built)
-  const followers = 0;
-  const following = 0;
-  const friends = 0;
+  // Social stats (real counts from socialStore)
+  const followers = myFollowersCount;
+  const following = myFollowingCount;
+  const friends = myFriendsCount;
+
+  // Fetch social counts + follow requests on mount and when screen regains focus
+  useFocusEffect(
+    useCallback(() => {
+      if (session?.user?.id) {
+        fetchMyCounts(session.user.id);
+        if (profile?.is_private) {
+          fetchFollowRequests(session.user.id);
+        }
+      }
+    }, [session?.user?.id, profile?.is_private])
+  );
 
   // Body stats (from profile, editable)
   const weight = profile?.weight_kg ?? null;
@@ -304,28 +318,60 @@ export default function PerfilScreen() {
 
           {/* Social stats row */}
           <View style={styles.socialRow}>
-            <TouchableOpacity style={styles.socialStat} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.socialStat} activeOpacity={0.7} onPress={() => router.push(`/social/followers?userId=${session?.user?.id}&userName=${encodeURIComponent(profile?.name || '')}` as any)}>
               <Text style={styles.socialValue}>{followers}</Text>
-              <Text style={styles.socialLabel}>Seguidores</Text>
+              <Text style={styles.socialLabel}>Apoiadores</Text>
             </TouchableOpacity>
             <View style={styles.socialDivider} />
-            <TouchableOpacity style={styles.socialStat} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.socialStat} activeOpacity={0.7} onPress={() => router.push(`/social/following?userId=${session?.user?.id}&userName=${encodeURIComponent(profile?.name || '')}` as any)}>
               <Text style={styles.socialValue}>{following}</Text>
-              <Text style={styles.socialLabel}>Seguindo</Text>
+              <Text style={styles.socialLabel}>Apoiando</Text>
             </TouchableOpacity>
             <View style={styles.socialDivider} />
-            <TouchableOpacity style={styles.socialStat} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.socialStat} activeOpacity={0.7} onPress={() => router.push(`/social/friends?userId=${session?.user?.id}&userName=${encodeURIComponent(profile?.name || '')}` as any)}>
               <Text style={styles.socialValue}>{friends}</Text>
-              <Text style={styles.socialLabel}>Amigos</Text>
+              <Text style={styles.socialLabel}>Parceiros</Text>
             </TouchableOpacity>
           </View>
         </GlassCard>
       </Animated.View>
 
+      {/* ── Follow Requests Banner ── */}
+      {profile?.is_private && followRequestsCount > 0 && (
+        <Animated.View entering={FadeInDown.delay(70).duration(400)}>
+          <TouchableOpacity
+            onPress={() => router.push('/social/requests' as any)}
+            style={styles.requestsBanner}
+            activeOpacity={0.7}
+          >
+            <View style={styles.requestsBannerIcon}>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="#FF6C24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <Circle cx="9" cy="7" r="4" />
+                <Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </Svg>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.requestsBannerTitle}>
+                Solicitacoes de apoio
+              </Text>
+              <Text style={styles.requestsBannerSubtitle}>
+                {followRequestsCount} {followRequestsCount === 1 ? 'pessoa quer' : 'pessoas querem'} te apoiar
+              </Text>
+            </View>
+            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Polyline points="9 18 15 12 9 6" />
+            </Svg>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {/* ── Tab Switcher ── */}
       <Animated.View entering={FadeInDown.delay(80).duration(400)} style={styles.tabSwitcher}>
-        {(['perfil', 'corridas'] as ProfileTab[]).map((tab) => {
+        {(['perfil', 'corridas', 'records'] as ProfileTab[]).map((tab) => {
           const isActive = activeTab === tab;
+          const label = tab === 'perfil' ? 'Perfil' : tab === 'corridas' ? 'Corridas' : 'Records';
           return (
             <TouchableOpacity
               key={tab}
@@ -340,8 +386,14 @@ export default function PerfilScreen() {
                 />
               )}
               {tab === 'corridas' && <SparkIcon size={13} color={isActive ? '#FF8540' : 'rgba(255,255,255,0.3)'} />}
+              {tab === 'records' && (
+                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={isActive ? '#FF8540' : 'rgba(255,255,255,0.3)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M6 9a6 6 0 0 1 12 0c0 3-2 5.5-6 9-4-3.5-6-6-6-9z" />
+                  <Circle cx="12" cy="9" r="2" />
+                </Svg>
+              )}
               <Text style={[styles.tabBtnText, isActive && styles.tabBtnTextActive]}>
-                {tab === 'perfil' ? 'Perfil' : 'Corridas'}
+                {label}
               </Text>
             </TouchableOpacity>
           );
@@ -351,6 +403,8 @@ export default function PerfilScreen() {
       {/* ── Tab Content ── */}
       {activeTab === 'corridas' ? (
         <CorridasContent userId={session?.user?.id ?? null} />
+      ) : activeTab === 'records' ? (
+        <RecordsContent userId={session?.user?.id ?? null} />
       ) : (
       <>
       {/* ── Body Stats ── */}
@@ -622,10 +676,10 @@ export default function PerfilScreen() {
           </GlassCard>
         </TouchableOpacity>
 
-        <TouchableOpacity activeOpacity={0.7}>
+        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/social/search' as any)}>
           <GlassCard style={styles.actionCard}>
             <UsersIcon />
-            <Text style={styles.actionText}>Encontrar Amigos</Text>
+            <Text style={styles.actionText}>Encontrar Parceiros</Text>
           </GlassCard>
         </TouchableOpacity>
       </Animated.View>
@@ -703,6 +757,39 @@ const styles = StyleSheet.create({
   socialValue: { fontFamily: 'Montserrat_700Bold', color: '#fff', fontSize: 18 },
   socialLabel: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.35)', fontSize: 11, marginTop: 2 },
   socialDivider: { width: 0.5, height: 30, backgroundColor: 'rgba(255,255,255,0.08)' },
+
+  // Follow Requests Banner
+  requestsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,108,36,0.08)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,108,36,0.15)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+    gap: 12,
+  },
+  requestsBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,108,36,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  requestsBannerTitle: {
+    fontFamily: 'Montserrat_600SemiBold',
+    color: '#fff',
+    fontSize: 14,
+  },
+  requestsBannerSubtitle: {
+    fontFamily: 'Montserrat_400Regular',
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    marginTop: 2,
+  },
 
   // Body stats
   bodyStatsRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },

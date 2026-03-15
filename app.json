@@ -2,7 +2,7 @@
   "expo": {
     "name": "VITTA UP",
     "slug": "vittaup",
-    "version": "1.5.0",
+    "version": "1.8.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,14 +15,17 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
-      "buildNumber": "44",
+      "buildNumber": "61",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["instagram-stories", "instagram"]
+        "LSApplicationQueriesSchemes": [
+          "instagram-stories",
+          "instagram"
+        ]
       }
     },
     "android": {
@@ -50,6 +53,7 @@
       "expo-apple-authentication",
       "expo-image-picker",
       "expo-web-browser",
+      "expo-notifications",
       "./plugins/withSwiftConcurrencyFix",
       [
         "expo-widgets",

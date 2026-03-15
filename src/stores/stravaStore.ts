@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 
+declare const __DEV__: boolean;
+
 // Update widget when stats change
 let updateWidget: ((data: { currentKm: number; goalKm: number; progressPercent: number }) => void) | null = null;
 try {
@@ -52,6 +54,80 @@ export interface StravaRun {
   moving_time_seconds: number;
   average_speed: number;
   sparks_awarded: number;
+  workout_type: number | null; // 0=default, 1=race, 2=long run, 3=workout
+}
+
+// Distance categories for personal records
+export type DistanceCategory = '5k' | '10k' | '21k' | '42k';
+
+export interface PersonalRecord {
+  category: DistanceCategory;
+  casual: { bestTime: number; bestPace: number; date: string; runId: string } | null;
+  competitive: { bestTime: number; bestPace: number; date: string; runId: string } | null;
+  totalRuns: number;
+  casualRuns: number;
+  competitiveRuns: number;
+}
+
+// Classify a run into a distance category
+// 3–8.99km → 5K | 9–16.99km → 10K | 17–35km → 21K | 35km+ → 42K
+export function getDistanceCategory(km: number): DistanceCategory | null {
+  if (km >= 3 && km < 9) return '5k';
+  if (km >= 9 && km < 17) return '10k';
+  if (km >= 17 && km < 35) return '21k';
+  if (km >= 35) return '42k';
+  return null; // too short
+}
+
+export function isCompetitive(workoutType: number | null): boolean {
+  return workoutType === 1;
+}
+
+export function getCategoryLabel(cat: DistanceCategory): string {
+  const labels: Record<DistanceCategory, string> = {
+    '5k': '5K', '10k': '10K', '21k': 'Meia', '42k': 'Maratona',
+  };
+  return labels[cat];
+}
+
+export function getCategoryFullLabel(cat: DistanceCategory): string {
+  const labels: Record<DistanceCategory, string> = {
+    '5k': '5 km', '10k': '10 km', '21k': 'Meia Maratona', '42k': 'Maratona',
+  };
+  return labels[cat];
+}
+
+// Compute personal records from runs
+export function computePersonalRecords(runs: StravaRun[]): PersonalRecord[] {
+  const categories: DistanceCategory[] = ['5k', '10k', '21k', '42k'];
+
+  return categories.map(cat => {
+    const catRuns = runs.filter(r => getDistanceCategory(r.distance_km) === cat);
+    const casualRuns = catRuns.filter(r => !isCompetitive(r.workout_type));
+    const compRuns = catRuns.filter(r => isCompetitive(r.workout_type));
+
+    const bestOf = (list: StravaRun[]) => {
+      if (list.length === 0) return null;
+      const best = list.reduce((a, b) => a.moving_time_seconds < b.moving_time_seconds ? a : b);
+      // Pace in seconds/km from average_speed (m/s) — same formula as RunCard
+      const paceSecsPerKm = best.average_speed > 0 ? 1000 / best.average_speed : 0;
+      return {
+        bestTime: best.moving_time_seconds,
+        bestPace: paceSecsPerKm,
+        date: best.activity_date,
+        runId: best.id,
+      };
+    };
+
+    return {
+      category: cat,
+      casual: bestOf(casualRuns),
+      competitive: bestOf(compRuns),
+      totalRuns: catRuns.length,
+      casualRuns: casualRuns.length,
+      competitiveRuns: compRuns.length,
+    };
+  });
 }
 
 interface StravaState {
@@ -474,9 +550,7 @@ export const useStravaStore = create<StravaState>((set, get) => ({
         .order('activity_date', { ascending: false })
         .limit(100);
 
-      if (error) throw error;
-
-      const runs: StravaRun[] = (data ?? []).map((r: any) => ({
+      const runs: StravaRun[] = (error ? [] : (data ?? [])).map((r: any) => ({
         id: r.id,
         strava_activity_id: r.strava_activity_id,
         activity_name: r.activity_name ?? 'Corrida',
@@ -485,10 +559,13 @@ export const useStravaStore = create<StravaState>((set, get) => ({
         moving_time_seconds: r.moving_time_seconds ?? 0,
         average_speed: Number(r.average_speed) ?? 0,
         sparks_awarded: r.sparks_awarded,
+        workout_type: r.workout_type ?? null,
       }));
 
-      const totalSparksEarned = runs.reduce((sum, r) => sum + r.sparks_awarded, 0);
-      set({ runs, totalSparksEarned, isLoadingRuns: false });
+      const allRuns = runs;
+
+      const totalSparksEarned = allRuns.reduce((sum, r) => sum + r.sparks_awarded, 0);
+      set({ runs: allRuns, totalSparksEarned, isLoadingRuns: false });
     } catch (e) {
       console.error('fetchRuns error:', e);
       set({ isLoadingRuns: false });
@@ -561,6 +638,7 @@ export const useStravaStore = create<StravaState>((set, get) => ({
           activity_date: activity.start_date_local,
           moving_time_seconds: activity.moving_time ?? 0,
           average_speed: activity.average_speed ?? 0,
+          workout_type: activity.workout_type ?? null,
         });
 
         totalNewSparks += sparks;

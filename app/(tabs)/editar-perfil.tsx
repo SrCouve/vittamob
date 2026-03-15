@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, Image, ActivityIndicator,
+  ScrollView, Alert, Image, ActivityIndicator, Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -12,7 +12,7 @@ import Svg, { Path, Circle, Polyline } from 'react-native-svg';
 let ImagePicker: any = null;
 let FileSystem: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
-try { FileSystem = require('expo-file-system'); } catch {}
+try { FileSystem = require('expo-file-system/legacy'); } catch {}
 import { decode } from 'base64-arraybuffer';
 import { GlassCard } from '../../src/components/GlassCard';
 import { useUserStore } from '../../src/stores/userStore';
@@ -47,6 +47,7 @@ export default function EditarPerfilScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? null);
+  const [isPrivate, setIsPrivate] = useState(profile?.is_private || false);
 
   useEffect(() => {
     if (profile) {
@@ -55,6 +56,7 @@ export default function EditarPerfilScreen() {
       setWeight(profile.weight_kg ? String(profile.weight_kg) : '');
       setHeight(profile.height_cm ? String(profile.height_cm) : '');
       setAvatarUrl(profile.avatar_url ?? null);
+      setIsPrivate(profile.is_private || false);
     }
   }, [profile]);
 
@@ -144,6 +146,7 @@ export default function EditarPerfilScreen() {
       bio: bio.trim() || null,
       weight_kg: weightNum && weightNum > 0 ? weightNum : null,
       height_cm: heightNum && heightNum > 0 ? heightNum : null,
+      is_private: isPrivate,
     });
 
     if (error) {
@@ -261,6 +264,20 @@ export default function EditarPerfilScreen() {
           <View style={[styles.field, styles.disabledField]}>
             <Text style={styles.disabledText}>{user?.email ?? ''}</Text>
           </View>
+
+          {/* Privacy Toggle */}
+          <View style={styles.privacyRow}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={styles.privacyTitle}>Perfil Privado</Text>
+              <Text style={styles.privacyDesc}>Apenas apoiadores podem ver suas publicações e atividades</Text>
+            </View>
+            <Switch
+              value={isPrivate}
+              onValueChange={setIsPrivate}
+              trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(255,108,36,0.4)' }}
+              thumbColor={isPrivate ? '#FF6C24' : 'rgba(255,255,255,0.6)'}
+            />
+          </View>
         </GlassCard>
       </Animated.View>
 
@@ -331,6 +348,14 @@ const styles = StyleSheet.create({
   halfField: { flex: 1 },
   disabledField: { backgroundColor: 'rgba(0,0,0,0.15)' },
   disabledText: { paddingHorizontal: 16, fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.3)', fontSize: 15 },
+
+  privacyRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 16, paddingHorizontal: 4,
+    borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.06)', marginTop: 8,
+  },
+  privacyTitle: { fontFamily: 'Montserrat_600SemiBold', fontSize: 15, color: 'white' },
+  privacyDesc: { fontFamily: 'Montserrat_400Regular', fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 4 },
 
   saveWrap: { paddingHorizontal: 4 },
   saveBtn: {

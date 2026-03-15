@@ -25,33 +25,28 @@ import Animated, {
   withSpring,
   useSharedValue,
 } from 'react-native-reanimated';
-import Svg, { Path, Circle as SvgCircle, Polyline } from 'react-native-svg';
+import Svg, { Path, Circle as SvgCircle, Polyline, Text as SvgText, G } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
 import { Logo } from '../../src/components/Logo';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { useAuthStore } from '../../src/stores/authStore';
-import { useStravaStore, type StravaRun } from '../../src/stores/stravaStore';
+import {
+  useStravaStore, type StravaRun, type DistanceCategory, type PersonalRecord,
+  computePersonalRecords, getCategoryLabel, getCategoryFullLabel, isCompetitive,
+} from '../../src/stores/stravaStore';
+import { router as navRouter } from 'expo-router';
 // Lazy-load native modules
 let ImagePicker: any = null;
 let Sharing: any = null;
 let ViewShot: any = null;
 let MediaLibrary: any = null;
 let RNShare: any = null;
-let RecordingViewComp: any = null;
-let useViewRecorderHook: any = null;
-let FileSystem: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
 try { Sharing = require('expo-sharing'); } catch {}
 try { ViewShot = require('react-native-view-shot').default; } catch {}
 try { MediaLibrary = require('expo-media-library'); } catch {}
 try { RNShare = require('react-native-share').default; } catch {}
-try {
-  const vr = require('react-native-view-recorder');
-  RecordingViewComp = vr.RecordingView;
-  useViewRecorderHook = vr.useViewRecorder;
-} catch {}
-try { FileSystem = require('expo-file-system'); } catch {}
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -66,8 +61,7 @@ const webGlass = isWeb
 
 const THUNDER_ANIM = require('../../assets/thunder-energia.json');
 const RUNNING_ANIM = require('../../assets/running.json');
-const THUNDER_GIF = require('../../assets/thunder-energia.gif');
-const RUNNING_GIF = require('../../assets/running.gif');
+const MEDAL_ANIM = require('../../assets/medal.json');
 const RUNNING_SHOE_ICON = require('../../assets/icon-running-shoe.png');
 
 // ─── Icons ───────────────────────────────────────────────────────
@@ -254,7 +248,240 @@ function StatsHero({ runs, totalSparks }: { runs: StravaRun[]; totalSparks: numb
 const STORY_W = SW * 0.9;
 const STORY_H = STORY_W * (16 / 9);
 
-function StoryCard({ run, bgUri, useGif }: { run: StravaRun; bgUri: string | null; useGif?: boolean }) {
+// ─── Distance Category Icons ─────────────────────────────────────
+// Style: Bold number (white) + runner silhouette + "K" (orange)
+// Inspired by the 5K running badge logo
+
+function CategoryIcon({ category, size = 28 }: { category: DistanceCategory; size?: number }) {
+  const num = category === '5k' ? '5' : category === '10k' ? '10' : category === '21k' ? '21' : '42';
+  const fs = size * 0.75;
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+      <Text style={{
+        fontFamily: FONTS.montserrat.extrabold, fontSize: fs,
+        color: 'rgba(255,255,255,0.7)', includeFontPadding: false, zIndex: 1,
+      }}>{num}</Text>
+      <Text style={{
+        fontFamily: FONTS.montserrat.extrabold, fontSize: fs,
+        color: '#FF8540', includeFontPadding: false,
+        marginLeft: fs * -0.17,
+      }}>K</Text>
+    </View>
+  );
+}
+
+// ─── Medal Board Button ──────────────────────────────────────────
+
+function MedalBoardButton() {
+  return (
+    <Animated.View entering={FadeInDown.delay(100).duration(500)} style={{ marginBottom: 20 }}>
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => navRouter.push('/(tabs)/medalhas' as any)}
+        style={md.button}
+      >
+        {!isWeb && <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />}
+        <LinearGradient
+          colors={['rgba(255,108,36,0.12)', 'rgba(255,108,36,0.04)']}
+          style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient
+          colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)']}
+          style={{ position: 'absolute', top: 0, left: '10%', right: '10%', height: 1 }}
+        />
+        <LottieView source={MEDAL_ANIM} autoPlay loop speed={0.5} style={{ width: 48, height: 48 }} />
+        <View style={{ flex: 1 }}>
+          <Text style={md.buttonTitle}>Quadro de Medalhas</Text>
+          <Text style={md.buttonSub}>Suas conquistas em provas oficiais</Text>
+        </View>
+        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M9 18l6-6-6-6" />
+        </Svg>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── Personal Records Section ────────────────────────────────────
+
+function formatRecordTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const sec = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h${m.toString().padStart(2, '0')}min`;
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+function formatRecordPace(paceSecsPerKm: number): string {
+  const m = Math.floor(paceSecsPerKm / 60);
+  const sec = Math.floor(paceSecsPerKm % 60);
+  return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+function PersonalRecords({ runs }: { runs: StravaRun[] }) {
+  const records = computePersonalRecords(runs);
+  const [expanded, setExpanded] = useState<DistanceCategory | null>(null);
+
+  // Only show categories that have at least 1 run
+  const activeRecords = records.filter(r => r.totalRuns > 0);
+  const emptyRecords = records.filter(r => r.totalRuns === 0);
+
+  if (runs.length === 0) return null;
+
+  return (
+    <Animated.View entering={FadeInDown.delay(150).duration(500)}>
+      {/* Section header */}
+      <View style={s.listHeader}>
+        <View style={s.listHeaderLine} />
+        <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <Path d="M12 15l-2 5-1.5-3L5 16l3-1.5L6 9l3 2 3-5 3 5 3-2-2 5.5L19 16l-3.5 1L14 20l-2-5z" />
+        </Svg>
+        <Text style={s.listHeaderText}>Records Pessoais</Text>
+        <View style={s.listHeaderLine} />
+      </View>
+
+      {/* Active records */}
+      {activeRecords.map((rec, i) => (
+        <Animated.View
+          key={rec.category}
+          entering={FadeInDown.delay(200 + i * 80).duration(400)}
+        >
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setExpanded(expanded === rec.category ? null : rec.category)}
+          >
+            <View style={pr.card}>
+              {!isWeb && <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />}
+              <LinearGradient
+                colors={['rgba(255,108,36,0.06)', 'rgba(255,108,36,0.02)']}
+                style={StyleSheet.absoluteFill}
+              />
+              {/* Specular highlight */}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)']}
+                style={pr.specular}
+              />
+
+              {/* Main row */}
+              <View style={pr.mainRow}>
+                {/* Category icon — overflows top of card */}
+                <View style={pr.iconOverflow}>
+                  <CategoryIcon category={rec.category} size={52} />
+                </View>
+
+                {/* Info */}
+                <View style={pr.info}>
+                  <Text style={pr.categoryName}>{getCategoryFullLabel(rec.category)}</Text>
+                  <View style={pr.metaRow}>
+                    <Text style={pr.metaText}>
+                      {rec.totalRuns} corrida{rec.totalRuns !== 1 ? 's' : ''}
+                    </Text>
+                    {rec.competitiveRuns > 0 && (
+                      <>
+                        <View style={pr.metaDot} />
+                        <Text style={pr.metaCompetitive}>{rec.competitiveRuns} oficial</Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+
+                {/* Best time (overall) */}
+                <View style={pr.bestCol}>
+                  {(() => {
+                    const best = rec.competitive ?? rec.casual;
+                    return best ? (
+                      <>
+                        <Text style={pr.bestTime}>{formatRecordTime(best.bestTime)}</Text>
+                        <Text style={pr.bestPace}>{formatRecordPace(best.bestPace)} /km</Text>
+                      </>
+                    ) : null;
+                  })()}
+                </View>
+
+                {/* Expand arrow */}
+                <View style={[pr.arrow, expanded === rec.category && pr.arrowUp]}>
+                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <Polyline points="6 9 12 15 18 9" />
+                  </Svg>
+                </View>
+              </View>
+
+              {/* Expanded detail */}
+              {expanded === rec.category && (
+                <Animated.View entering={FadeIn.duration(250)} style={pr.detail}>
+                  <View style={pr.detailDivider} />
+                  <View style={pr.detailGrid}>
+                    {/* Casual */}
+                    <View style={pr.detailCol}>
+                      <View style={pr.detailLabel}>
+                        <View style={[pr.detailDot, { backgroundColor: '#FF8540' }]} />
+                        <Text style={pr.detailLabelText}>Casual</Text>
+                      </View>
+                      {rec.casual ? (
+                        <>
+                          <Text style={pr.detailValue}>{formatRecordTime(rec.casual.bestTime)}</Text>
+                          <Text style={pr.detailSub}>Pace {formatRecordPace(rec.casual.bestPace)} /km</Text>
+                          <Text style={pr.detailRuns}>{rec.casualRuns} corrida{rec.casualRuns !== 1 ? 's' : ''}</Text>
+                        </>
+                      ) : (
+                        <Text style={pr.detailEmpty}>Sem registro</Text>
+                      )}
+                    </View>
+
+                    <View style={pr.detailSep} />
+
+                    {/* Competitive */}
+                    <View style={pr.detailCol}>
+                      <View style={pr.detailLabel}>
+                        <View style={[pr.detailDot, { backgroundColor: '#FF6C24' }]} />
+                        <Text style={pr.detailLabelText}>Competitivo</Text>
+                      </View>
+                      {rec.competitive ? (
+                        <>
+                          <Text style={pr.detailValue}>{formatRecordTime(rec.competitive.bestTime)}</Text>
+                          <Text style={pr.detailSub}>Pace {formatRecordPace(rec.competitive.bestPace)} /km</Text>
+                          <Text style={pr.detailRuns}>{rec.competitiveRuns} corrida{rec.competitiveRuns !== 1 ? 's' : ''}</Text>
+                        </>
+                      ) : (
+                        <Text style={pr.detailEmpty}>Sem registro</Text>
+                      )}
+                    </View>
+                  </View>
+                </Animated.View>
+              )}
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      ))}
+
+      {/* Empty/locked categories */}
+      {emptyRecords.map((rec, i) => (
+        <Animated.View
+          key={rec.category}
+          entering={FadeInDown.delay(300 + activeRecords.length * 80 + i * 60).duration(400)}
+        >
+          <View style={[pr.card, pr.cardLocked]}>
+            {!isWeb && <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />}
+            <View style={pr.mainRow}>
+              <View style={pr.iconOverflow}>
+                <CategoryIcon category={rec.category} size={48} />
+              </View>
+              <View style={pr.info}>
+                <Text style={[pr.categoryName, pr.textLocked]}>{getCategoryFullLabel(rec.category)}</Text>
+                <Text style={pr.metaLocked}>Complete uma corrida para desbloquear</Text>
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+      ))}
+    </Animated.View>
+  );
+}
+
+// ─── Story Share ──────────────────────────────────────────────────
+
+function StoryCard({ run, bgUri }: { run: StravaRun; bgUri: string | null }) {
   return (
     <View style={storyStyles.card}>
       {/* Background — photo takes full space */}
@@ -311,7 +538,7 @@ function StoryCard({ run, bgUri, useGif }: { run: StravaRun; bgUri: string | nul
             <Text style={storyStyles.date}>{formatDate(run.activity_date)} · {formatDateFull(run.activity_date)}</Text>
           </View>
           <View style={storyStyles.sparksBadge}>
-            {useGif ? <Image source={THUNDER_GIF} style={{ width: 24, height: 24 }} /> : <LottieView source={THUNDER_ANIM} autoPlay loop speed={0.8} style={{ width: 24, height: 24 }} />}
+            <LottieView source={THUNDER_ANIM} autoPlay loop speed={0.8} style={{ width: 24, height: 24 }} />
             <Text style={storyStyles.sparksValue}>+{run.sparks_awarded}</Text>
           </View>
         </View>
@@ -323,7 +550,7 @@ function StoryCard({ run, bgUri, useGif }: { run: StravaRun; bgUri: string | nul
               colors={['rgba(255,108,36,0.2)', 'rgba(255,108,36,0.08)']}
               style={StyleSheet.absoluteFill}
             />
-            {useGif ? <Image source={RUNNING_GIF} style={{ width: 36, height: 36 }} /> : <LottieView source={RUNNING_ANIM} autoPlay loop speed={1} style={{ width: 36, height: 36 }} />}
+            <LottieView source={RUNNING_ANIM} autoPlay loop speed={1} style={{ width: 36, height: 36 }} />
           </View>
 
           <View style={storyStyles.statItem}>
@@ -350,16 +577,6 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const viewShotRef = useRef<any>(null);
   const [bgUri, setBgUri] = useState<string | null>(null);
   const [sharing, setSharing] = useState<'ig' | 'share' | 'dl' | null>(null);
-  const [dots, setDots] = useState('.');
-  const recorder = useViewRecorderHook ? useViewRecorderHook() : null;
-
-  // Animated dots for video recording
-  React.useEffect(() => {
-    if (sharing !== 'dl' || !recorder) return;
-    const iv = setInterval(() => setDots(d => d.length >= 3 ? '.' : d + '.'), 500);
-    return () => clearInterval(iv);
-  }, [sharing, recorder]);
-
   if (!run) return null;
 
   const pickPhoto = () => {
@@ -468,32 +685,6 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const handleDownload = async () => {
     setSharing('dl');
     try {
-      // Try video first (view-recorder + GIF animations)
-      if (recorder && FileSystem) {
-        try {
-          const outputPath = `${FileSystem.cacheDirectory}vitta-story-${Date.now()}.mp4`;
-          const videoUri = await recorder.record({
-            output: outputPath,
-            fps: 30,
-            totalFrames: 150, // 5 seconds
-            codec: 'h264' as const,
-            quality: 0.85,
-          });
-          if (videoUri && MediaLibrary) {
-            const { status } = await MediaLibrary.requestPermissionsAsync();
-            if (status === 'granted') {
-              await MediaLibrary.saveToLibraryAsync(videoUri);
-              Alert.alert('Salvo!', 'Vídeo salvo na sua galeria.');
-              setSharing(null);
-              return;
-            }
-          }
-        } catch (e) {
-          console.warn('Video failed, falling back to image:', e);
-        }
-      }
-
-      // Fallback: static image
       const uri = await captureMedia();
       if (!uri) { Alert.alert('Erro', 'Não foi possível capturar.'); setSharing(null); return; }
 
@@ -535,24 +726,13 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
               <StoryCard run={run} bgUri={bgUri} />
             </View>
             {/* Hidden capture — NO borderRadius, full rectangle */}
-            {/* Hidden capture — no borderRadius, uses GIF instead of Lottie for video recording */}
-            <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}>
-              {recorder && RecordingViewComp ? (
-                <RecordingViewComp sessionId={recorder.sessionId} style={{ width: STORY_W, height: STORY_H }}>
-                  {ViewShot ? (
-                    <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
-                      <StoryCard run={run} bgUri={bgUri} useGif />
-                    </ViewShot>
-                  ) : (
-                    <StoryCard run={run} bgUri={bgUri} useGif />
-                  )}
-                </RecordingViewComp>
-              ) : ViewShot ? (
+            {ViewShot && (
+              <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}>
                 <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
                   <StoryCard run={run} bgUri={bgUri} />
                 </ViewShot>
-              ) : null}
-            </View>
+              </View>
+            )}
             {/* Photo picker overlay */}
             {!bgUri && (
               <TouchableOpacity onPress={pickPhoto} style={storyStyles.pickOverlay} activeOpacity={0.7}>
@@ -569,13 +749,6 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 
           {/* Actions */}
           <View style={storyStyles.actionsCol}>
-            {/* Loading — only during video recording */}
-            {sharing === 'dl' && recorder && (
-              <Animated.View entering={FadeIn.duration(250)} style={storyStyles.loadingFloat}>
-                <LottieView source={RUNNING_ANIM} autoPlay loop speed={1.2} style={{ width: 48, height: 48 }} />
-                <Text style={storyStyles.loadingText}>Preparando{dots}</Text>
-              </Animated.View>
-            )}
             <View style={storyStyles.actionsRow}>
               {/* Download — icon only */}
               <TouchableOpacity
@@ -706,6 +879,12 @@ function RunCard({ run, index, onShare }: { run: StravaRun; index: number; onSha
             <Text style={s.runDate}>{formatDate(run.activity_date)}</Text>
             <Text style={s.runDateDot}>·</Text>
             <Text style={s.runDate}>{formatDateFull(run.activity_date)}</Text>
+            {isCompetitive(run.workout_type) && (
+              <>
+                <Text style={s.runDateDot}>·</Text>
+                <Text style={s.runCompBadge}>Oficial</Text>
+              </>
+            )}
           </View>
         </View>
 
@@ -831,7 +1010,34 @@ export function CorridasContent({ userId }: { userId: string | null }) {
   );
 }
 
+// ─── Records Content (used inside perfil.tsx tab) ────────────────
+
+export function RecordsContent({ userId }: { userId: string | null }) {
+  const { runs, isLoadingRuns, fetchRuns } = useStravaStore();
+
+  useEffect(() => {
+    if (userId) fetchRuns(userId);
+  }, [userId]);
+
+  if (isLoadingRuns && runs.length === 0) {
+    return (
+      <View style={s.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6C24" />
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <MedalBoardButton />
+      <PersonalRecords runs={runs} />
+    </>
+  );
+}
+
 // ─── Main Screen (standalone, kept for direct navigation) ────────
+
+type SubTab = 'corridas' | 'records';
 
 export default function CorridasScreen() {
   const insets = useSafeAreaInsets();
@@ -843,6 +1049,7 @@ export default function CorridasScreen() {
   } = useStravaStore();
   const [refreshing, setRefreshing] = useState(false);
   const [shareRun, setShareRun] = useState<StravaRun | null>(null);
+  const [subTab, setSubTab] = useState<SubTab>('corridas');
 
   const userId = user?.id ?? null;
 
@@ -903,18 +1110,67 @@ export default function CorridasScreen() {
         )}
       </Animated.View>
 
-      {/* ══ SPARKS RULE ══ */}
-      <Animated.View entering={FadeInDown.delay(50).duration(500)} style={s.ruleCard}>
-        {!isWeb && <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />}
+      {/* ══ SUB TABS ══ */}
+      <Animated.View entering={FadeInDown.delay(30).duration(400)} style={s.subTabsWrap}>
+        {!isWeb && <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />}
         <LinearGradient
-          colors={['rgba(255,108,36,0.10)', 'rgba(255,108,36,0.03)']}
+          colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
           style={StyleSheet.absoluteFill}
         />
-        <LottieView source={THUNDER_ANIM} autoPlay loop speed={0.8} style={{ width: 22, height: 22 }} />
-        <Text style={s.ruleText}>1 km corrido = 1 spark</Text>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setSubTab('corridas')}
+          style={[s.subTab, subTab === 'corridas' && s.subTabActive]}
+        >
+          {subTab === 'corridas' && (
+            <LinearGradient
+              colors={['rgba(255,108,36,0.20)', 'rgba(255,108,36,0.08)']}
+              style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+            />
+          )}
+          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={subTab === 'corridas' ? '#FF6C24' : 'rgba(255,255,255,0.35)'} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <SvgCircle cx="13.5" cy="6.5" r="2.5" />
+            <Path d="M10 22 6.5 13 4 15" />
+            <Path d="M19.5 9.5 14 14l-3-3" />
+            <Path d="m14 14 5.5 8" />
+            <Path d="M6.5 13 10 10l3 3" />
+          </Svg>
+          <Text style={[s.subTabText, subTab === 'corridas' && s.subTabTextActive]}>Corridas</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setSubTab('records')}
+          style={[s.subTab, subTab === 'records' && s.subTabActive]}
+        >
+          {subTab === 'records' && (
+            <LinearGradient
+              colors={['rgba(255,108,36,0.20)', 'rgba(255,108,36,0.08)']}
+              style={[StyleSheet.absoluteFill, { borderRadius: 12 }]}
+            />
+          )}
+          <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={subTab === 'records' ? '#FF6C24' : 'rgba(255,255,255,0.35)'} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M6 9a6 6 0 0 1 12 0c0 3-2 5.5-6 9-4-3.5-6-6-6-9z" />
+            <SvgCircle cx="12" cy="9" r="2" />
+          </Svg>
+          <Text style={[s.subTabText, subTab === 'records' && s.subTabTextActive]}>Records</Text>
+        </TouchableOpacity>
       </Animated.View>
 
-      {/* ══ LOADING ══ */}
+      {/* ══ SPARKS RULE ══ */}
+      {subTab === 'corridas' && (
+        <Animated.View entering={FadeInDown.delay(50).duration(500)} style={s.ruleCard}>
+          {!isWeb && <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />}
+          <LinearGradient
+            colors={['rgba(255,108,36,0.10)', 'rgba(255,108,36,0.03)']}
+            style={StyleSheet.absoluteFill}
+          />
+          <LottieView source={THUNDER_ANIM} autoPlay loop speed={0.8} style={{ width: 22, height: 22 }} />
+          <Text style={s.ruleText}>1 km corrido = 1 spark</Text>
+        </Animated.View>
+      )}
+
+      {/* ══ CONTENT ══ */}
       {isLoadingRuns && runs.length === 0 ? (
         <View style={s.loadingContainer}>
           <ActivityIndicator size="large" color="#FF6C24" />
@@ -922,7 +1178,7 @@ export default function CorridasScreen() {
         </View>
       ) : runs.length === 0 ? (
         <EmptyRuns isConnected={isConnected} />
-      ) : (
+      ) : subTab === 'corridas' ? (
         <>
           {/* ══ HERO STATS ══ */}
           <StatsHero runs={runs} totalSparks={totalSparksEarned} />
@@ -938,6 +1194,12 @@ export default function CorridasScreen() {
           {runs.map((run, i) => (
             <RunCard key={run.id} run={run} index={i} onShare={setShareRun} />
           ))}
+        </>
+      ) : (
+        /* ══ RECORDS TAB ══ */
+        <>
+          <MedalBoardButton />
+          <PersonalRecords runs={runs} />
         </>
       )}
       <ShareModal run={shareRun} visible={!!shareRun} onClose={() => setShareRun(null)} />
@@ -1086,15 +1348,7 @@ const storyStyles = StyleSheet.create({
   previewRounded: {
     borderRadius: 24, overflow: 'hidden',
   },
-  loadingFloat: {
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 8,
-  },
-  loadingText: {
-    fontFamily: FONTS.montserrat.semibold, color: 'rgba(255,255,255,0.6)',
-    fontSize: 13, marginTop: 2, width: 90, textAlign: 'center',
-  },
-  actionsCol: {
+actionsCol: {
     paddingHorizontal: 20, paddingBottom: 50, paddingTop: 16,
     width: '100%', gap: 10,
   },
@@ -1165,6 +1419,28 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,108,36,0.1)',
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.15)',
+  },
+
+  // Sub tabs
+  subTabsWrap: {
+    flexDirection: 'row', gap: 6,
+    borderRadius: 16, overflow: 'hidden',
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.08)',
+    padding: 4, marginBottom: 16,
+  },
+  subTab: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 12, borderRadius: 12, overflow: 'hidden',
+  },
+  subTabActive: {
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.2)',
+  },
+  subTabText: {
+    fontFamily: FONTS.montserrat.medium, color: 'rgba(255,255,255,0.35)',
+    fontSize: 13,
+  },
+  subTabTextActive: {
+    fontFamily: FONTS.montserrat.semibold, color: '#FF6C24',
   },
 
   // Rule card
@@ -1306,6 +1582,10 @@ const s = StyleSheet.create({
   runDateDot: {
     color: 'rgba(255,255,255,0.12)', fontSize: 11,
   },
+  runCompBadge: {
+    fontFamily: FONTS.montserrat.semibold, color: '#FF6C24',
+    fontSize: 10,
+  },
 
   // Sparks badge
   sparksBadge: {
@@ -1364,5 +1644,140 @@ const s = StyleSheet.create({
   emptyDesc: {
     fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
     fontSize: 13, textAlign: 'center', lineHeight: 19,
+  },
+});
+
+// ─── Personal Records Styles ─────────────────────────────────────
+
+const pr = StyleSheet.create({
+  card: {
+    borderRadius: 16, overflow: 'visible',
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.12)',
+    marginBottom: 10, marginTop: 12,
+  },
+  cardLocked: {
+    opacity: 0.4, borderColor: 'rgba(255,255,255,0.06)',
+  },
+  specular: {
+    position: 'absolute', top: 0, left: '10%', right: '10%', height: 1, zIndex: 1,
+  },
+  mainRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 14, paddingVertical: 14, zIndex: 2,
+  },
+  iconOverflow: {
+    marginTop: -18,
+  },
+  iconWrap: {
+    width: 44, height: 44, borderRadius: 14,
+    overflow: 'hidden', justifyContent: 'center', alignItems: 'center',
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.15)',
+  },
+  iconLocked: {
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  info: { flex: 1 },
+  categoryName: {
+    fontFamily: FONTS.montserrat.semibold, color: '#fff', fontSize: 15,
+  },
+  metaRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3,
+  },
+  metaText: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
+  },
+  metaDot: {
+    width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  metaCompetitive: {
+    fontFamily: FONTS.montserrat.medium, color: '#FF6C24', fontSize: 11,
+  },
+  metaLocked: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.2)',
+    fontSize: 11, marginTop: 3,
+  },
+  textLocked: {
+    color: 'rgba(255,255,255,0.5)',
+  },
+  bestCol: {
+    alignItems: 'flex-end',
+  },
+  bestTime: {
+    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 16,
+  },
+  bestPace: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
+    fontSize: 11, marginTop: 2,
+  },
+  arrow: {
+    width: 20, height: 20, justifyContent: 'center', alignItems: 'center',
+  },
+  arrowUp: {
+    transform: [{ rotate: '180deg' }],
+  },
+
+  // Expanded detail
+  detail: {
+    paddingHorizontal: 14, paddingBottom: 16, zIndex: 2,
+  },
+  detailDivider: {
+    height: 0.5, backgroundColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 14,
+  },
+  detailGrid: {
+    flexDirection: 'row',
+  },
+  detailCol: {
+    flex: 1,
+  },
+  detailSep: {
+    width: 0.5, backgroundColor: 'rgba(255,255,255,0.06)',
+    marginHorizontal: 16,
+  },
+  detailLabel: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8,
+  },
+  detailDot: {
+    width: 6, height: 6, borderRadius: 3,
+  },
+  detailLabelText: {
+    fontFamily: FONTS.montserrat.medium, color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+  },
+  detailValue: {
+    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 20,
+  },
+  detailSub: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
+    fontSize: 11, marginTop: 3,
+  },
+  detailRuns: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.2)',
+    fontSize: 10, marginTop: 6,
+  },
+  detailEmpty: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.2)',
+    fontSize: 12, fontStyle: 'italic',
+  },
+});
+
+// ─── Medal Button Styles ─────────────────────────────────────────
+
+const md = StyleSheet.create({
+  button: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    borderRadius: 18, overflow: 'hidden',
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.15)',
+    paddingVertical: 16, paddingHorizontal: 18,
+    shadowColor: '#FF6C24', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08, shadowRadius: 16,
+  },
+  buttonTitle: {
+    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 15,
+  },
+  buttonSub: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
+    fontSize: 12, marginTop: 2,
   },
 });
