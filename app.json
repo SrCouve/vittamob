@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
-      "buildNumber": "70",
+      "buildNumber": "71",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {
@@ -73,7 +73,8 @@
           ]
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-sqlite"
     ],
     "extra": {
       "router": {},
