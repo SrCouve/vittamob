@@ -28,6 +28,7 @@ import Animated, {
 import Svg, { Path, Circle as SvgCircle, Polyline, Text as SvgText, G } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
 import { Logo } from '../../src/components/Logo';
+import { RoutePreview } from '../../src/components/RoutePreview';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -36,6 +37,8 @@ import {
   computePersonalRecords, getCategoryLabel, getCategoryFullLabel, isCompetitive,
 } from '../../src/stores/stravaStore';
 import { router as navRouter } from 'expo-router';
+import { useCommunityStore } from '../../src/stores/communityStore';
+import { useUserStore } from '../../src/stores/userStore';
 import { supabase } from '../../src/lib/supabase';
 // Lazy-load native modules
 let ImagePicker: any = null;
@@ -482,7 +485,7 @@ function PersonalRecords({ runs }: { runs: StravaRun[] }) {
 
 // ─── Story Share ──────────────────────────────────────────────────
 
-function StoryCard({ run, bgUri }: { run: StravaRun; bgUri: string | null }) {
+function StoryCard({ run, bgUri, showRoute }: { run: StravaRun; bgUri: string | null; showRoute?: boolean }) {
   return (
     <View style={storyStyles.card}>
       {/* Background — photo takes full space */}
@@ -501,6 +504,13 @@ function StoryCard({ run, bgUri }: { run: StravaRun; bgUri: string | null }) {
         locations={[0, 0.65, 0.8, 1]}
         style={StyleSheet.absoluteFill}
       />
+
+      {/* Route map overlay — centered */}
+      {showRoute && run.summary_polyline && (
+        <View style={storyStyles.routeOverlay}>
+          <RoutePreview polyline={run.summary_polyline} width={240} height={200} />
+        </View>
+      )}
 
       {/* Top: VITTA UP + powered by Strava */}
       <View style={storyStyles.topSection}>
@@ -578,6 +588,7 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
   const viewShotRef = useRef<any>(null);
   const [bgUri, setBgUri] = useState<string | null>(null);
   const [sharing, setSharing] = useState<'ig' | 'share' | 'dl' | null>(null);
+  const [showRoute, setShowRoute] = useState(true);
   if (!run) return null;
 
   const pickPhoto = () => {
@@ -724,13 +735,13 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
           <View style={storyStyles.previewWrap}>
             {/* Visual rounded preview */}
             <View style={storyStyles.previewRounded}>
-              <StoryCard run={run} bgUri={bgUri} />
+              <StoryCard run={run} bgUri={bgUri} showRoute={showRoute} />
             </View>
             {/* Hidden capture — NO borderRadius, full rectangle */}
             {ViewShot && (
               <View style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }}>
                 <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 1 }} style={{ width: STORY_W, height: STORY_H }}>
-                  <StoryCard run={run} bgUri={bgUri} />
+                  <StoryCard run={run} bgUri={bgUri} showRoute={showRoute} />
                 </ViewShot>
               </View>
             )}
@@ -747,6 +758,35 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
               </TouchableOpacity>
             )}
           </View>
+
+          {/* Route toggle */}
+          {run.summary_polyline && (
+            <TouchableOpacity
+              onPress={() => setShowRoute(!showRoute)}
+              activeOpacity={0.7}
+              style={{
+                flexDirection: 'row', alignItems: 'center', gap: 10,
+                paddingHorizontal: 20, paddingVertical: 10, marginBottom: 8,
+              }}
+            >
+              <View style={{
+                width: 22, height: 22, borderRadius: 6,
+                borderWidth: 1.5,
+                borderColor: showRoute ? '#FF6C24' : 'rgba(255,255,255,0.2)',
+                backgroundColor: showRoute ? '#FF6C24' : 'transparent',
+                justifyContent: 'center', alignItems: 'center',
+              }}>
+                {showRoute && (
+                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                    <Polyline points="20 6 9 17 4 12" />
+                  </Svg>
+                )}
+              </View>
+              <Text style={{ fontFamily: 'Montserrat_500Medium', color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+                Mostrar percurso
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Actions */}
           <View style={storyStyles.actionsCol}>
@@ -848,7 +888,7 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 
 // ─── Run Card ────────────────────────────────────────────────────
 
-function RunCard({ run, index, onShare, readOnly }: { run: StravaRun; index: number; onShare: (run: StravaRun) => void; readOnly?: boolean }) {
+function RunCard({ run, index, onShare, onPostRun, readOnly, hideRoutes }: { run: StravaRun; index: number; onShare: (run: StravaRun) => void; onPostRun?: (run: StravaRun) => void; readOnly?: boolean; hideRoutes?: boolean }) {
   return (
     <Animated.View
       entering={FadeInDown.delay(Math.min(index * 60, 400)).duration(450)}
@@ -896,34 +936,62 @@ function RunCard({ run, index, onShare, readOnly }: { run: StravaRun; index: num
         </View>
       </View>
 
-      {/* Stats + Share */}
-      <View style={s.runStats}>
-        <View style={s.runStatItem}>
-          <Text style={s.runStatValue}>{run.distance_km.toFixed(2)}</Text>
-          <Text style={s.runStatUnit}>km</Text>
+      {/* Stats — 3 columns symmetrical */}
+      <View style={s.runStatsGrid}>
+        <View style={s.runStatCol}>
+          <Text style={s.runStatLabel}>Distância</Text>
+          <Text style={s.runStatValue}>{run.distance_km.toFixed(2)} <Text style={s.runStatUnit}>km</Text></Text>
         </View>
-
-        <View style={s.runStatSep} />
-
-        <View style={s.runStatItem}>
-          <ClockIcon size={12} />
-          <Text style={s.runStatMeta}>{formatDuration(run.moving_time_seconds)}</Text>
+        <View style={s.runStatDivider} />
+        <View style={s.runStatCol}>
+          <Text style={s.runStatLabel}>Tempo</Text>
+          <Text style={s.runStatValue}>{formatDuration(run.moving_time_seconds)}</Text>
         </View>
-
-        <View style={s.runStatSep} />
-
-        <View style={s.runStatItem}>
-          <Text style={s.runStatMeta}>{formatPace(run.average_speed)}</Text>
+        <View style={s.runStatDivider} />
+        <View style={s.runStatCol}>
+          <Text style={s.runStatLabel}>Pace</Text>
+          <Text style={s.runStatValue}>{formatPace(run.average_speed)}</Text>
         </View>
-
-        <View style={{ flex: 1 }} />
-
-        {!readOnly && (
-          <TouchableOpacity onPress={() => onShare(run)} style={s.shareIconBtn} activeOpacity={0.7}>
-            <ShareIcon size={15} />
-          </TouchableOpacity>
-        )}
       </View>
+
+      {/* Route preview (hidden if user chose to hide routes) */}
+      {run.summary_polyline && !hideRoutes ? (
+        <View style={s.routePreviewCard}>
+          <RoutePreview polyline={run.summary_polyline} width={SW - 80} height={90} />
+        </View>
+      ) : null}
+
+      {/* Share / Post buttons below stats */}
+      {!readOnly && (
+        <View style={s.shareRow}>
+          {onPostRun && (
+            <>
+              <TouchableOpacity
+                onPress={() => onPostRun(run)}
+                activeOpacity={0.7}
+                style={s.postRunBtn}
+              >
+                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#FF6C24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                  <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <SvgCircle cx="9" cy="7" r="4" />
+                  <Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                  <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </Svg>
+                <Text style={[s.postRunText, { color: '#FF6C24' }]}>Postar no Social</Text>
+              </TouchableOpacity>
+              <View style={s.shareRowDivider} />
+            </>
+          )}
+          <TouchableOpacity
+            onPress={() => onShare(run)}
+            activeOpacity={0.7}
+            style={s.shareBtnRow}
+          >
+            <ShareIcon size={14} color="rgba(255,255,255,0.35)" />
+            <Text style={s.shareText}>Compartilhar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -951,13 +1019,43 @@ function EmptyRuns({ isConnected }: { isConnected: boolean }) {
 
 // ─── Reusable Content (used inside perfil.tsx tab) ──────────────
 
-export function CorridasContent({ userId, readOnly }: { userId: string | null; readOnly?: boolean }) {
+export function CorridasContent({ userId, readOnly, hideRoutes }: { userId: string | null; readOnly?: boolean; hideRoutes?: boolean }) {
   // When readOnly, use LOCAL state to avoid corrupting the global stravaStore
   const store = useStravaStore();
+  const { createPost } = useCommunityStore();
   const [localRuns, setLocalRuns] = useState<StravaRun[]>([]);
   const [localLoading, setLocalLoading] = useState(false);
   const [localSparks, setLocalSparks] = useState(0);
   const [shareRun, setShareRun] = useState<StravaRun | null>(null);
+
+  const postRunToSocial = useCallback(async (run: StravaRun, includeRoute: boolean) => {
+    if (!userId) return;
+    const success = await createPost(userId, 'run_complete', undefined, {
+      activity_name: run.activity_name,
+      distance_km: run.distance_km,
+      moving_time_seconds: run.moving_time_seconds,
+      average_speed: run.average_speed,
+      sparks_awarded: run.sparks_awarded,
+      summary_polyline: includeRoute ? run.summary_polyline : null,
+      strava_activity_id: run.strava_activity_id,
+    });
+    if (success) {
+      Alert.alert('Publicado!', 'Sua corrida foi postada no social.');
+    }
+  }, [userId, createPost]);
+
+  const handlePostRun = useCallback((run: StravaRun) => {
+    if (!userId) return;
+    if (run.summary_polyline && !hideRoutes) {
+      Alert.alert('Postar no Social', 'Deseja incluir o percurso?', [
+        { text: 'Com percurso', onPress: () => postRunToSocial(run, true) },
+        { text: 'Sem percurso', onPress: () => postRunToSocial(run, false) },
+        { text: 'Cancelar', style: 'cancel' },
+      ]);
+    } else {
+      postRunToSocial(run, false);
+    }
+  }, [userId, postRunToSocial, hideRoutes]);
 
   const runs = readOnly ? localRuns : store.runs;
   const isLoadingRuns = readOnly ? localLoading : store.isLoadingRuns;
@@ -985,6 +1083,7 @@ export function CorridasContent({ userId, readOnly }: { userId: string | null; r
             average_speed: Number(r.average_speed) || 0,
             sparks_awarded: r.sparks_awarded,
             workout_type: r.workout_type ?? null,
+            summary_polyline: r.summary_polyline ?? null,
           }));
           setLocalRuns(mapped);
           setLocalSparks(mapped.reduce((sum, r) => sum + r.sparks_awarded, 0));
@@ -1036,7 +1135,7 @@ export function CorridasContent({ userId, readOnly }: { userId: string | null; r
           </View>
 
           {runs.map((run, i) => (
-            <RunCard key={run.id} run={run} index={i} onShare={setShareRun} readOnly={readOnly} />
+            <RunCard key={run.id} run={run} index={i} onShare={setShareRun} onPostRun={!readOnly ? handlePostRun : undefined} readOnly={readOnly} hideRoutes={hideRoutes} />
           ))}
         </>
       )}
@@ -1075,6 +1174,7 @@ export function RecordsContent({ userId, readOnly }: { userId: string | null; re
             average_speed: Number(r.average_speed) || 0,
             sparks_awarded: r.sparks_awarded,
             workout_type: r.workout_type ?? null,
+            summary_polyline: r.summary_polyline ?? null,
           }));
           setLocalRuns(mapped);
           setLocalLoading(false);
@@ -1112,11 +1212,43 @@ export default function CorridasScreen() {
     runs, isLoadingRuns, totalSparksEarned, isConnected, isSyncing,
     fetchRuns, syncAndAwardRuns,
   } = useStravaStore();
+  const { createPost } = useCommunityStore();
+  const { profile } = useUserStore();
+  const hideRoutes = profile?.hide_routes || false;
   const [refreshing, setRefreshing] = useState(false);
   const [shareRun, setShareRun] = useState<StravaRun | null>(null);
   const [subTab, setSubTab] = useState<SubTab>('corridas');
 
   const userId = user?.id ?? null;
+
+  const postRunToSocial = useCallback(async (run: StravaRun, includeRoute: boolean) => {
+    if (!userId) return;
+    const success = await createPost(userId, 'run_complete', undefined, {
+      activity_name: run.activity_name,
+      distance_km: run.distance_km,
+      moving_time_seconds: run.moving_time_seconds,
+      average_speed: run.average_speed,
+      sparks_awarded: run.sparks_awarded,
+      summary_polyline: includeRoute ? run.summary_polyline : null,
+      strava_activity_id: run.strava_activity_id,
+    });
+    if (success) {
+      Alert.alert('Publicado!', 'Sua corrida foi postada no social.');
+    }
+  }, [userId, createPost]);
+
+  const handlePostRun = useCallback((run: StravaRun) => {
+    if (!userId) return;
+    if (run.summary_polyline && !hideRoutes) {
+      Alert.alert('Postar no Social', 'Deseja incluir o percurso?', [
+        { text: 'Com percurso', onPress: () => postRunToSocial(run, true) },
+        { text: 'Sem percurso', onPress: () => postRunToSocial(run, false) },
+        { text: 'Cancelar', style: 'cancel' },
+      ]);
+    } else {
+      postRunToSocial(run, false);
+    }
+  }, [userId, postRunToSocial, hideRoutes]);
 
   useEffect(() => {
     if (userId) {
@@ -1257,7 +1389,7 @@ export default function CorridasScreen() {
           </View>
 
           {runs.map((run, i) => (
-            <RunCard key={run.id} run={run} index={i} onShare={setShareRun} />
+            <RunCard key={run.id} run={run} index={i} onShare={setShareRun} onPostRun={handlePostRun} />
           ))}
         </>
       ) : (
@@ -1279,6 +1411,14 @@ const storyStyles = StyleSheet.create({
     width: STORY_W, height: STORY_H,
     borderRadius: 24, overflow: 'hidden',
     backgroundColor: '#0D0D0D',
+  },
+  routeOverlay: {
+    position: 'absolute',
+    top: '25%',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 1,
   },
   topSection: {
     position: 'absolute', top: 24, left: 20, right: 20, zIndex: 2,
@@ -1663,33 +1803,83 @@ const s = StyleSheet.create({
     fontFamily: FONTS.montserrat.bold, color: '#FF6C24', fontSize: 13,
   },
 
-  // Run stats row
-  runStats: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingBottom: 14, paddingTop: 4, gap: 12, zIndex: 2,
+  // Stats + route container
+  runStatsRoute: {
+    flexDirection: 'row', alignItems: 'center', zIndex: 2,
     borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.04)',
   },
-  runStatItem: {
-    flexDirection: 'row', alignItems: 'baseline', gap: 3,
+  routePreviewWrap: {
+    paddingRight: 12, paddingVertical: 6, opacity: 0.85,
+  },
+
+  // Run stats row
+  runStatsGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+    zIndex: 2,
+  },
+  runStatCol: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  runStatLabel: {
+    fontFamily: FONTS.montserrat.regular,
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 10,
+    marginBottom: 4,
   },
   runStatValue: {
-    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 16,
+    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 15,
   },
   runStatUnit: {
     fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
     fontSize: 11,
   },
-  runStatMeta: {
-    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
-    fontSize: 12,
+  runStatDivider: {
+    width: 0.5, height: 28, backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  runStatSep: {
-    width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.1)',
+  routePreviewCard: {
+    marginHorizontal: 16,
+    marginBottom: 14,
+    alignItems: 'center',
+    borderRadius: 12,
   },
   shareIconBtn: {
     width: 30, height: 30, borderRadius: 15,
     backgroundColor: 'rgba(255,255,255,0.06)',
     justifyContent: 'center', alignItems: 'center',
+  },
+  shareRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 6,
+    borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.05)',
+    marginTop: 4,
+  },
+  postRunBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, flex: 1, paddingVertical: 6,
+  },
+  postRunText: {
+    fontFamily: FONTS.montserrat.semibold,
+    color: '#FF8540',
+    fontSize: 12,
+  },
+  shareRowDivider: {
+    width: 0.5, height: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  shareBtnRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, flex: 1, paddingVertical: 6,
+  },
+  shareText: {
+    fontFamily: 'Montserrat_500Medium',
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 12,
   },
 
   // Loading

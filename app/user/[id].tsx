@@ -438,6 +438,7 @@ export default function PublicProfileScreen() {
         average_speed: Number(r.average_speed) || 0,
         sparks_awarded: r.sparks_awarded ?? 0,
         workout_type: r.workout_type ?? null,
+        summary_polyline: r.summary_polyline ?? null,
       }));
       setStravaRuns(runs);
     }
@@ -1199,7 +1200,7 @@ export default function PublicProfileScreen() {
 
                 {/* ── Tab Content ── */}
                 {activeTab === 'corridas' ? (
-                  <CorridasContent userId={id ?? null} readOnly />
+                  <CorridasContent userId={id ?? null} readOnly hideRoutes={profile?.hide_routes} />
                 ) : activeTab === 'records' ? (
                   <RecordsContent userId={id ?? null} readOnly />
                 ) : (

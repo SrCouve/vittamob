@@ -48,6 +48,7 @@ export default function EditarPerfilScreen() {
   const [isUploading, setIsUploading] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? null);
   const [isPrivate, setIsPrivate] = useState(profile?.is_private || false);
+  const [hideRoutes, setHideRoutes] = useState(profile?.hide_routes || false);
 
   useEffect(() => {
     if (profile) {
@@ -57,6 +58,7 @@ export default function EditarPerfilScreen() {
       setHeight(profile.height_cm ? String(profile.height_cm) : '');
       setAvatarUrl(profile.avatar_url ?? null);
       setIsPrivate(profile.is_private || false);
+      setHideRoutes(profile.hide_routes || false);
     }
   }, [profile]);
 
@@ -147,6 +149,7 @@ export default function EditarPerfilScreen() {
       weight_kg: weightNum && weightNum > 0 ? weightNum : null,
       height_cm: heightNum && heightNum > 0 ? heightNum : null,
       is_private: isPrivate,
+      hide_routes: hideRoutes,
     });
 
     if (error) {
@@ -276,6 +279,20 @@ export default function EditarPerfilScreen() {
               onValueChange={setIsPrivate}
               trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(255,108,36,0.4)' }}
               thumbColor={isPrivate ? '#FF6C24' : 'rgba(255,255,255,0.6)'}
+            />
+          </View>
+
+          {/* Hide Routes Toggle */}
+          <View style={styles.privacyRow}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={styles.privacyTitle}>Ocultar Percursos</Text>
+              <Text style={styles.privacyDesc}>O mapa das suas corridas fica oculto para outros usuarios</Text>
+            </View>
+            <Switch
+              value={hideRoutes}
+              onValueChange={setHideRoutes}
+              trackColor={{ false: 'rgba(255,255,255,0.1)', true: 'rgba(255,108,36,0.4)' }}
+              thumbColor={hideRoutes ? '#FF6C24' : 'rgba(255,255,255,0.6)'}
             />
           </View>
         </GlassCard>

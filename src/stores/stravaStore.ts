@@ -55,6 +55,7 @@ export interface StravaRun {
   average_speed: number;
   sparks_awarded: number;
   workout_type: number | null; // 0=default, 1=race, 2=long run, 3=workout
+  summary_polyline: string | null;
 }
 
 // Distance categories for personal records
@@ -560,6 +561,7 @@ export const useStravaStore = create<StravaState>((set, get) => ({
         average_speed: Number(r.average_speed) || 0,
         sparks_awarded: r.sparks_awarded,
         workout_type: r.workout_type ?? null,
+        summary_polyline: r.summary_polyline ?? null,
       }));
 
       const allRuns = runs;
@@ -639,9 +641,30 @@ export const useStravaStore = create<StravaState>((set, get) => ({
           moving_time_seconds: activity.moving_time ?? 0,
           average_speed: activity.average_speed ?? 0,
           workout_type: activity.workout_type ?? null,
+          summary_polyline: activity.map?.summary_polyline ?? null,
         });
 
         totalNewSparks += sparks;
+      }
+
+      // Backfill polylines for old runs that don't have one
+      const { data: missingPolyline } = await supabase
+        .from('strava_awarded_runs')
+        .select('strava_activity_id')
+        .eq('user_id', userId)
+        .is('summary_polyline', null);
+
+      if (missingPolyline && missingPolyline.length > 0) {
+        const missingIds = new Set(missingPolyline.map((r: any) => r.strava_activity_id));
+        for (const activity of activities) {
+          if (missingIds.has(activity.id) && activity.map?.summary_polyline) {
+            await supabase
+              .from('strava_awarded_runs')
+              .update({ summary_polyline: activity.map.summary_polyline })
+              .eq('strava_activity_id', activity.id)
+              .eq('user_id', userId);
+          }
+        }
       }
 
       // Award all sparks at once

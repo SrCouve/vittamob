@@ -2,7 +2,7 @@
   "expo": {
     "name": "VITTA UP",
     "slug": "vittaup",
-    "version": "1.8.0",
+    "version": "1.9.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
-      "buildNumber": "73",
+      "buildNumber": "74",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {

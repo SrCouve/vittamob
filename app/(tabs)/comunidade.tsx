@@ -37,6 +37,7 @@ import LottieView from 'lottie-react-native';
 import { useRouter } from 'expo-router';
 import { Logo } from '../../src/components/Logo';
 import { GlassCard } from '../../src/components/GlassCard';
+import { RoutePreview } from '../../src/components/RoutePreview';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -60,6 +61,7 @@ const FIRE_ANIM = require('../../assets/fire-emoji.json');
 const AWARD_ANIM = require('../../assets/award-emoji.json');
 const CELEBRATION_ANIM = require('../../assets/celebration.json');
 const THUNDER_ANIM = require('../../assets/thunder-energia.json');
+const RUNNING_ANIM = require('../../assets/running.json');
 
 // ─── Filter Tabs ─────────────────────────────────────────────────
 // FeedFilter type is now imported from communityStore
@@ -151,6 +153,26 @@ function CloseIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function SparkIcon({ size = 16, color = '#FF6C24' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </Svg>
+  );
+}
+
+function RunIcon({ size = 16, color = 'rgba(255,255,255,0.5)' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <SvgCircle cx="13.5" cy="6.5" r="2.5" />
+      <Path d="M10 22 6.5 13 4 15" />
+      <Path d="M19.5 9.5 14 14l-3-3" />
+      <Path d="m14 14 5.5 8" />
+      <Path d="M6.5 13 10 10l3 3" />
+    </Svg>
+  );
+}
+
 function UsersIcon({ size = 16 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -177,6 +199,22 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(days / 7)}sem`;
 }
 
+function formatDurationShort(seconds: number): string {
+  if (!seconds) return '--';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h${m}min`;
+  return `${m}min`;
+}
+
+function formatPaceShort(avgSpeed: number): string {
+  if (avgSpeed === 0) return '--';
+  const paceSeconds = 1000 / avgSpeed;
+  const mins = Math.floor(paceSeconds / 60);
+  const secs = Math.floor(paceSeconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 function getPostText(post: CommunityPost): string {
   switch (post.type) {
     case 'lesson_complete':
@@ -187,6 +225,8 @@ function getPostText(post: CommunityPost): string {
       return `está em uma sequência de ${post.metadata?.streak_days ?? '?'} dias!`;
     case 'challenge_join':
       return `entrou no desafio "${post.metadata?.challenge_title ?? 'um desafio'}"`;
+    case 'run_complete':
+      return `completou ${post.metadata?.distance_km?.toFixed(1)}km em ${formatDurationShort(post.metadata?.moving_time_seconds)}`;
     case 'text':
       return post.content ?? '';
     default:
@@ -205,7 +245,7 @@ function getInitials(name: string): string {
 
 function matchesFilter(post: CommunityPost, filter: FeedFilter): boolean {
   if (filter === 'all') return true;
-  if (filter === 'conquistas') return ['lesson_complete', 'module_complete', 'streak'].includes(post.type);
+  if (filter === 'conquistas') return ['lesson_complete', 'module_complete', 'streak', 'run_complete'].includes(post.type);
   if (filter === 'desafios') return post.type === 'challenge_join';
   if (filter === 'fotos') return post.type === 'photo' || !!post.image_url;
   return true;
@@ -571,6 +611,7 @@ function PostCard({
                 {post.type === 'module_complete' && <TrophyIcon size={11} color="#FF6C24" />}
                 {post.type === 'streak' && <FireIcon size={11} color="#FFAC7D" />}
                 {post.type === 'challenge_join' && <TrophyIcon size={11} color="#FF6C24" />}
+                {post.type === 'run_complete' && <RunIcon size={11} color="#FF8540" />}
               </View>
             )}
           </View>
@@ -675,6 +716,56 @@ function PostCard({
             <Text style={s.challengeJoinBadgeText}>Entrou</Text>
           </View>
         </View>
+      )}
+
+      {/* Run complete card */}
+      {post.type === 'run_complete' && post.metadata?.distance_km && (
+        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.runPostCard}>
+          <LinearGradient
+            colors={['rgba(255,108,36,0.10)', 'rgba(255,108,36,0.03)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Big distance hero */}
+          <View style={s.runPostHero}>
+            <LottieView source={RUNNING_ANIM} autoPlay loop speed={1.2} style={{ width: 52, height: 52 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.runPostDistance}>
+                {post.metadata.distance_km.toFixed(1)}
+                <Text style={s.runPostDistanceUnit}> km</Text>
+              </Text>
+              <Text style={s.runPostTitle}>{post.metadata.activity_name || 'Corrida'}</Text>
+            </View>
+            {post.metadata.sparks_awarded > 0 && (
+              <View style={s.runPostSparks}>
+                <LottieView source={THUNDER_ANIM} autoPlay loop speed={0.8} style={{ width: 28, height: 28 }} />
+                <Text style={s.runPostSparksText}>+{post.metadata.sparks_awarded}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Stats row */}
+          <View style={s.runPostStatsRow}>
+            <View style={s.runPostStatItem}>
+              <Text style={s.runPostStatLabel}>Tempo</Text>
+              <Text style={s.runPostStatValue}>{formatDurationShort(post.metadata.moving_time_seconds)}</Text>
+            </View>
+            <View style={s.runPostStatDivider} />
+            <View style={s.runPostStatItem}>
+              <Text style={s.runPostStatLabel}>Pace</Text>
+              <Text style={s.runPostStatValue}>{post.metadata.average_speed ? formatPaceShort(post.metadata.average_speed) : '--'}/km</Text>
+            </View>
+          </View>
+
+          {/* Route preview */}
+          {post.metadata.summary_polyline && (
+            <View style={s.runPostRoute}>
+              <RoutePreview polyline={post.metadata.summary_polyline} width={SW - 76} height={130} />
+            </View>
+          )}
+        </Animated.View>
       )}
 
       {/* Actions */}
@@ -1686,5 +1777,87 @@ const s = StyleSheet.create({
     color: 'rgba(255,255,255,0.4)',
     fontSize: 12,
     marginTop: 1,
+  },
+
+  // Run Post Card
+  runPostCard: {
+    marginHorizontal: 14,
+    marginBottom: 8,
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,108,36,0.15)',
+    overflow: 'hidden',
+    padding: 16,
+  },
+  runPostHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  runPostDistance: {
+    fontFamily: FONTS.montserrat.extrabold || FONTS.montserrat.bold,
+    color: '#fff',
+    fontSize: 28,
+    includeFontPadding: false,
+  },
+  runPostDistanceUnit: {
+    fontFamily: FONTS.montserrat.regular,
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 16,
+  },
+  runPostTitle: {
+    fontFamily: FONTS.montserrat.regular,
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  runPostSparks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,108,36,0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,108,36,0.2)',
+  },
+  runPostSparksText: {
+    fontFamily: FONTS.montserrat.bold,
+    color: '#FF6C24',
+    fontSize: 13,
+  },
+  runPostStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  runPostStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  runPostStatLabel: {
+    fontFamily: FONTS.montserrat.regular,
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 10,
+    marginBottom: 4,
+  },
+  runPostStatValue: {
+    fontFamily: FONTS.montserrat.bold,
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 14,
+  },
+  runPostStatDivider: {
+    width: 0.5,
+    height: 28,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  runPostRoute: {
+    marginTop: 14,
+    alignItems: 'center',
+    borderRadius: 14,
   },
 });

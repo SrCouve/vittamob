@@ -26,6 +26,7 @@ export interface PublicProfile {
   total_lessons?: number;
   total_hours?: number;
   has_strava?: boolean;
+  hide_routes?: boolean;
   followers_count: number;
   following_count: number;
   created_at?: string;
@@ -169,6 +170,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         total_lessons: row.total_lessons ?? 0,
         total_hours: row.total_hours ?? 0,
         has_strava: row.has_strava ?? false,
+        hide_routes: row.hide_routes ?? false,
         followers_count: row.followers_count ?? 0,
         following_count: row.following_count ?? 0,
         created_at: row.created_at ?? null,
