@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Polyline } from 'react-native-svg';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useSocialStore, type UserListItem } from '../../src/stores/socialStore';
+import { supabase } from '../../src/lib/supabase';
 
 // ── Icons ──
 
@@ -79,37 +80,58 @@ export default function FollowersScreen() {
   const insets = useSafeAreaInsets();
   const { userId, userName } = useLocalSearchParams<{ userId: string; userName?: string }>();
   const { session } = useAuthStore();
-  const { followers, isLoadingList, fetchFollowers, removeFollower } = useSocialStore();
+  const { removeFollower } = useSocialStore();
   const offsetRef = useRef(0);
   const hasMoreRef = useRef(true);
 
   const myId = session?.user?.id ?? '';
   const targetId = userId ?? myId;
-  const [hasLoaded, setHasLoaded] = useState(false);
+
+  // LOCAL state — prevents flash from global store
+  const [items, setItems] = useState<UserListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchPage = useCallback(async (offset: number) => {
+    const { data, error } = await supabase.rpc('get_followers', {
+      p_user_id: targetId,
+      p_viewer_id: myId,
+      p_limit: PAGE_SIZE,
+      p_offset: offset,
+    });
+    if (error) { console.error('fetchFollowers error:', error); return []; }
+    return (data ?? []).map((r: any) => ({
+      id: r.id, name: r.name ?? 'Usuário', avatar_url: r.avatar_url,
+      bio: r.bio, is_private: r.is_private ?? false, followers_count: r.followers_count ?? 0,
+    }));
+  }, [targetId, myId]);
 
   useEffect(() => {
     if (!targetId || !myId) return;
-    // Clear previous data before fetching
-    useSocialStore.setState({ followers: [] });
-    setHasLoaded(false);
+    setItems([]);
+    setLoading(true);
     offsetRef.current = 0;
     hasMoreRef.current = true;
-    fetchFollowers(targetId, myId, 0).then(() => setHasLoaded(true));
+    fetchPage(0).then((data) => {
+      setItems(data);
+      setLoading(false);
+      if (data.length < PAGE_SIZE) hasMoreRef.current = false;
+    });
   }, [targetId, myId]);
 
   const handleLoadMore = useCallback(() => {
-    if (isLoadingList || !hasMoreRef.current) return;
+    if (loading || !hasMoreRef.current) return;
     const nextOffset = offsetRef.current + PAGE_SIZE;
-    const prevCount = followers.length;
-    fetchFollowers(targetId, myId, nextOffset).then(() => {
-      const newCount = useSocialStore.getState().followers.length;
-      if (newCount === prevCount) {
+    setLoading(true);
+    fetchPage(nextOffset).then((data) => {
+      if (data.length === 0) {
         hasMoreRef.current = false;
       } else {
+        setItems(prev => [...prev, ...data]);
         offsetRef.current = nextOffset;
       }
+      setLoading(false);
     });
-  }, [isLoadingList, targetId, myId, followers.length]);
+  }, [loading, fetchPage]);
 
   const isOwnList = targetId === myId;
 
@@ -148,18 +170,18 @@ export default function FollowersScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Apoiadores</Text>
-          {followers.length > 0 && (
+          {items.length > 0 && (
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{followers.length}</Text>
+              <Text style={styles.countText}>{items.length}</Text>
             </View>
           )}
         </View>
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* List */}
+      {/* List — only show data after first load to prevent flash */}
       <FlatList
-        data={followers}
+        data={items}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100, flexGrow: 1 }}
@@ -167,7 +189,7 @@ export default function FollowersScreen() {
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
-          !hasLoaded || isLoadingList ? (
+          loading ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator color="#FF6C24" size="large" />
             </View>
@@ -179,7 +201,7 @@ export default function FollowersScreen() {
           )
         }
         ListFooterComponent={
-          isLoadingList && followers.length > 0 ? (
+          loading && items.length > 0 ? (
             <View style={styles.footerLoader}>
               <ActivityIndicator color="#FF6C24" size="small" />
             </View>

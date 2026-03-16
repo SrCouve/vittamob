@@ -8,7 +8,8 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Polyline } from 'react-native-svg';
 import { useAuthStore } from '../../src/stores/authStore';
-import { useSocialStore, type UserListItem } from '../../src/stores/socialStore';
+import { type UserListItem } from '../../src/stores/socialStore';
+import { supabase } from '../../src/lib/supabase';
 
 // ── Icons ──
 
@@ -77,36 +78,49 @@ export default function FollowingScreen() {
   const insets = useSafeAreaInsets();
   const { userId, userName } = useLocalSearchParams<{ userId: string; userName?: string }>();
   const { session } = useAuthStore();
-  const { following, isLoadingList, fetchFollowing } = useSocialStore();
   const offsetRef = useRef(0);
   const hasMoreRef = useRef(true);
 
   const myId = session?.user?.id ?? '';
   const targetId = userId ?? myId;
-  const [hasLoaded, setHasLoaded] = useState(false);
+
+  const [items, setItems] = useState<UserListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchPage = useCallback(async (offset: number) => {
+    const { data, error } = await supabase.rpc('get_following', {
+      p_user_id: targetId, p_viewer_id: myId, p_limit: PAGE_SIZE, p_offset: offset,
+    });
+    if (error) { console.error('fetchFollowing error:', error); return []; }
+    return (data ?? []).map((r: any) => ({
+      id: r.id, name: r.name ?? 'Usuário', avatar_url: r.avatar_url,
+      bio: r.bio, is_private: r.is_private ?? false, followers_count: r.followers_count ?? 0,
+    }));
+  }, [targetId, myId]);
 
   useEffect(() => {
     if (!targetId || !myId) return;
+    setItems([]);
+    setLoading(true);
     offsetRef.current = 0;
     hasMoreRef.current = true;
-    useSocialStore.setState({ following: [] });
-    setHasLoaded(false);
-    fetchFollowing(targetId, myId, 0).then(() => setHasLoaded(true));
+    fetchPage(0).then((data) => {
+      setItems(data);
+      setLoading(false);
+      if (data.length < PAGE_SIZE) hasMoreRef.current = false;
+    });
   }, [targetId, myId]);
 
   const handleLoadMore = useCallback(() => {
-    if (isLoadingList || !hasMoreRef.current) return;
+    if (loading || !hasMoreRef.current) return;
     const nextOffset = offsetRef.current + PAGE_SIZE;
-    const prevCount = following.length;
-    fetchFollowing(targetId, myId, nextOffset).then(() => {
-      const newCount = useSocialStore.getState().following.length;
-      if (newCount === prevCount) {
-        hasMoreRef.current = false;
-      } else {
-        offsetRef.current = nextOffset;
-      }
+    setLoading(true);
+    fetchPage(nextOffset).then((data) => {
+      if (data.length === 0) { hasMoreRef.current = false; }
+      else { setItems(prev => [...prev, ...data]); offsetRef.current = nextOffset; }
+      setLoading(false);
     });
-  }, [isLoadingList, targetId, myId, following.length]);
+  }, [loading, fetchPage]);
 
   const renderItem = useCallback(({ item }: { item: UserListItem }) => (
     <UserCard item={item} />
@@ -123,9 +137,9 @@ export default function FollowingScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Apoiando</Text>
-          {following.length > 0 && (
+          {items.length > 0 && (
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{following.length}</Text>
+              <Text style={styles.countText}>{items.length}</Text>
             </View>
           )}
         </View>
@@ -134,7 +148,7 @@ export default function FollowingScreen() {
 
       {/* List */}
       <FlatList
-        data={following}
+        data={items}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100, flexGrow: 1 }}
@@ -142,7 +156,7 @@ export default function FollowingScreen() {
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
         ListEmptyComponent={
-          !hasLoaded || isLoadingList ? (
+          loading ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator color="#FF6C24" size="large" />
             </View>
@@ -154,7 +168,7 @@ export default function FollowingScreen() {
           )
         }
         ListFooterComponent={
-          isLoadingList && following.length > 0 ? (
+          loading && items.length > 0 ? (
             <View style={styles.footerLoader}>
               <ActivityIndicator color="#FF6C24" size="small" />
             </View>

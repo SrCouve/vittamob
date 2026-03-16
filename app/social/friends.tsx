@@ -8,7 +8,8 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Polyline } from 'react-native-svg';
 import { useAuthStore } from '../../src/stores/authStore';
-import { useSocialStore, type UserListItem } from '../../src/stores/socialStore';
+import { type UserListItem } from '../../src/stores/socialStore';
+import { supabase } from '../../src/lib/supabase';
 
 // ── Icons ──
 
@@ -81,17 +82,27 @@ export default function FriendsScreen() {
   const insets = useSafeAreaInsets();
   const { userId, userName } = useLocalSearchParams<{ userId: string; userName?: string }>();
   const { session } = useAuthStore();
-  const { friends, isLoadingList, fetchFriends } = useSocialStore();
 
   const myId = session?.user?.id ?? '';
   const targetId = userId ?? myId;
-  const [hasLoaded, setHasLoaded] = useState(false);
+
+  const [items, setItems] = useState<UserListItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!targetId || !myId) return;
-    useSocialStore.setState({ friends: [] });
-    setHasLoaded(false);
-    fetchFriends(targetId, myId).then(() => setHasLoaded(true));
+    setItems([]);
+    setLoading(true);
+    supabase.rpc('get_friends', { p_user_id: targetId, p_viewer_id: myId, p_limit: 50, p_offset: 0 })
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setItems((data as any[]).map((r: any) => ({
+            id: r.id, name: r.name ?? 'Usuário', avatar_url: r.avatar_url,
+            bio: r.bio, is_private: r.is_private ?? false, followers_count: r.followers_count ?? 0,
+          })));
+        }
+        setLoading(false);
+      });
   }, [targetId, myId]);
 
   const renderItem = useCallback(({ item }: { item: UserListItem }) => (
@@ -109,9 +120,9 @@ export default function FriendsScreen() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Parceiros</Text>
-          {friends.length > 0 && (
+          {items.length > 0 && (
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{friends.length}</Text>
+              <Text style={styles.countText}>{items.length}</Text>
             </View>
           )}
         </View>
@@ -120,13 +131,13 @@ export default function FriendsScreen() {
 
       {/* List */}
       <FlatList
-        data={friends}
+        data={items}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         contentContainerStyle={{ paddingBottom: insets.bottom + 100, flexGrow: 1 }}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
-          !hasLoaded || isLoadingList ? (
+          loading ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator color="#FF6C24" size="large" />
             </View>
