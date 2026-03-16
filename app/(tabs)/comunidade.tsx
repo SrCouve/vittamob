@@ -859,29 +859,36 @@ function CommentsSection({
 
       {/* Input */}
       {userId && (
-        <View style={{ zIndex: 10 }}>
-          {/* Mention dropdown for comments */}
+        <View style={{ zIndex: 10, position: 'relative' }}>
+          {/* Mention dropdown for comments — floats above input */}
           {mentionQuery !== null && mentionResults.length > 0 && (
-            <View style={[s.mentionDropdown, { marginBottom: 4 }]}>
+            <View style={s.mentionDropdown}>
               {!isWeb && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
               <LinearGradient
                 colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
                 style={StyleSheet.absoluteFill}
               />
-              {mentionResults.map((u, idx) => (
-                <TouchableOpacity
-                  key={u.id}
-                  style={[s.mentionItem, idx === mentionResults.length - 1 && { borderBottomWidth: 0 }]}
-                  activeOpacity={0.7}
-                  onPress={() => selectMention(u)}
-                >
-                  <UserAvatar name={u.name} avatarUrl={u.avatar_url} size={28} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.mentionName}>{u.name}</Text>
-                    <Text style={s.mentionHandle}>@{u.name.split(' ')[0].toLowerCase()}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              <ScrollView
+                style={{ maxHeight: 220 }}
+                showsVerticalScrollIndicator={mentionResults.length > 5}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+              >
+                {mentionResults.map((u, idx) => (
+                  <TouchableOpacity
+                    key={u.id}
+                    style={[s.mentionItem, idx === mentionResults.length - 1 && { borderBottomWidth: 0 }]}
+                    activeOpacity={0.7}
+                    onPress={() => selectMention(u)}
+                  >
+                    <UserAvatar name={u.name} avatarUrl={u.avatar_url} size={28} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.mentionName}>{u.name}</Text>
+                      <Text style={s.mentionHandle}>@{u.name.split(' ')[0].toLowerCase()}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           )}
           <View style={s.commentInputRow}>
@@ -940,7 +947,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
     const filtered = query.length > 0
       ? mentionCacheRef.current.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
       : mentionCacheRef.current;
-    setMentionResults(filtered.slice(0, 4));
+    setMentionResults(filtered);
   }, [userId]);
 
   const handleTextChange = useCallback((newText: string) => {
@@ -1015,8 +1022,8 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
   const canPost = text.trim() || imageUri;
 
   return (
-    <View style={{ zIndex: 10 }}>
-      {/* Mention dropdown — OUTSIDE composeCard to avoid overflow:hidden clipping */}
+    <View style={{ zIndex: 10, position: 'relative' }}>
+      {/* Mention dropdown — positioned absolute above the compose card */}
       {mentionQuery !== null && mentionResults.length > 0 && (
         <View style={s.mentionDropdown}>
           {!isWeb && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
@@ -1024,20 +1031,27 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
             colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
             style={StyleSheet.absoluteFill}
           />
-          {mentionResults.map((u, idx) => (
-            <TouchableOpacity
-              key={u.id}
-              style={[s.mentionItem, idx === mentionResults.length - 1 && { borderBottomWidth: 0 }]}
-              activeOpacity={0.7}
-              onPress={() => selectMention(u)}
-            >
-              <UserAvatar name={u.name} avatarUrl={u.avatar_url} size={28} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.mentionName}>{u.name}</Text>
-                <Text style={s.mentionHandle}>@{u.name.split(' ')[0].toLowerCase()}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          <ScrollView
+            style={{ maxHeight: 220 }}
+            showsVerticalScrollIndicator={mentionResults.length > 5}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
+            {mentionResults.map((u, idx) => (
+              <TouchableOpacity
+                key={u.id}
+                style={[s.mentionItem, idx === mentionResults.length - 1 && { borderBottomWidth: 0 }]}
+                activeOpacity={0.7}
+                onPress={() => selectMention(u)}
+              >
+                <UserAvatar name={u.name} avatarUrl={u.avatar_url} size={28} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.mentionName}>{u.name}</Text>
+                  <Text style={s.mentionHandle}>@{u.name.split(' ')[0].toLowerCase()}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -1642,11 +1656,16 @@ const s = StyleSheet.create({
 
   // Mention dropdown
   mentionDropdown: {
-    marginBottom: 6,
+    position: 'absolute',
+    bottom: '100%',
+    left: 0,
+    right: 0,
+    marginBottom: 4,
     borderRadius: 16,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.10)',
     overflow: 'hidden',
+    zIndex: 100,
   },
   mentionItem: {
     flexDirection: 'row',
