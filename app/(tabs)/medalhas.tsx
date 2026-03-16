@@ -8,7 +8,7 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { FONTS } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useMedalStore, type RaceMedal } from '../../src/stores/medalStore';
@@ -38,11 +38,14 @@ function formatPace(avgSpeed: number): string {
 
 export default function MedalhasScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ targetUserId?: string }>();
   const { user } = useAuthStore();
   const { medals, isLoading, fetchMedals, updatePhoto } = useMedalStore();
   const [selectedMedal, setSelectedMedal] = useState<RaceMedal | null>(null);
 
-  const userId = user?.id ?? null;
+  // If targetUserId is passed, show that user's medals (readOnly)
+  const userId = params.targetUserId ?? user?.id ?? null;
+  const isOwner = !params.targetUserId || params.targetUserId === user?.id;
 
   useEffect(() => {
     if (userId) fetchMedals(userId);
@@ -212,13 +215,19 @@ export default function MedalhasScreen() {
 
               {/* Photo */}
               {selectedMedal.user_photo_url ? (
-                <TouchableOpacity onPress={() => pickPhoto(selectedMedal)} activeOpacity={0.9} style={s.photoWrap}>
-                  <Image source={{ uri: selectedMedal.user_photo_url }} style={s.photo} resizeMode="cover" />
-                  <View style={s.photoOverlay}>
-                    <Text style={s.photoOverlayText}>Trocar foto</Text>
+                isOwner ? (
+                  <TouchableOpacity onPress={() => pickPhoto(selectedMedal)} activeOpacity={0.9} style={s.photoWrap}>
+                    <Image source={{ uri: selectedMedal.user_photo_url }} style={s.photo} resizeMode="cover" />
+                    <View style={s.photoOverlay}>
+                      <Text style={s.photoOverlayText}>Trocar foto</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={s.photoWrap}>
+                    <Image source={{ uri: selectedMedal.user_photo_url }} style={s.photo} resizeMode="cover" />
                   </View>
-                </TouchableOpacity>
-              ) : (
+                )
+              ) : isOwner ? (
                 <TouchableOpacity onPress={() => pickPhoto(selectedMedal)} activeOpacity={0.8} style={s.addPhotoBtn}>
                   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
                     <Path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
@@ -226,7 +235,7 @@ export default function MedalhasScreen() {
                   </Svg>
                   <Text style={s.addPhotoText}>Adicionar foto da corrida</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
 
               {/* Close */}
               <TouchableOpacity onPress={() => setSelectedMedal(null)} style={s.closeBtn} activeOpacity={0.8}>

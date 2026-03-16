@@ -274,12 +274,12 @@ function CategoryIcon({ category, size = 28 }: { category: DistanceCategory; siz
 
 // ─── Medal Board Button ──────────────────────────────────────────
 
-function MedalBoardButton() {
+function MedalBoardButton({ targetUserId }: { targetUserId?: string }) {
   return (
     <Animated.View entering={FadeInDown.delay(100).duration(500)} style={{ marginBottom: 20 }}>
       <TouchableOpacity
         activeOpacity={0.85}
-        onPress={() => navRouter.push('/(tabs)/medalhas' as any)}
+        onPress={() => navRouter.push(targetUserId ? `/(tabs)/medalhas?targetUserId=${targetUserId}` as any : '/(tabs)/medalhas' as any)}
         style={md.button}
       >
         {!isWeb && <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />}
@@ -294,7 +294,7 @@ function MedalBoardButton() {
         <LottieView source={MEDAL_ANIM} autoPlay loop speed={0.5} style={{ width: 48, height: 48 }} />
         <View style={{ flex: 1 }}>
           <Text style={md.buttonTitle}>Quadro de Medalhas</Text>
-          <Text style={md.buttonSub}>Suas conquistas em provas oficiais</Text>
+          <Text style={md.buttonSub}>{targetUserId ? 'Conquistas em provas oficiais' : 'Suas conquistas em provas oficiais'}</Text>
         </View>
         <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <Path d="M9 18l6-6-6-6" />
@@ -1094,7 +1094,7 @@ export function RecordsContent({ userId, readOnly }: { userId: string | null; re
 
   return (
     <>
-      {!readOnly && <MedalBoardButton />}
+      <MedalBoardButton targetUserId={readOnly ? (userId ?? undefined) : undefined} />
       <PersonalRecords runs={runs} />
     </>
   );

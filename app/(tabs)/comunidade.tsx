@@ -267,7 +267,7 @@ function TopMembersSection({ members, onMemberPress }: { members: TopMember[]; o
   return (
     <Animated.View entering={FadeInDown.delay(100).duration(500)}>
       <View style={s.sectionHeader}>
-        <Text style={s.sectionTitle}>Destaques</Text>
+        <Text style={s.sectionTitle}>Rank da Semana</Text>
         <Text style={s.sectionSub}>esta semana</Text>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.topScroll}>
