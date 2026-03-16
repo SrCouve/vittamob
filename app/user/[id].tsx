@@ -1208,9 +1208,9 @@ export default function PublicProfileScreen() {
 
                 {/* ── Tab Content ── */}
                 {activeTab === 'corridas' ? (
-                  <CorridasContent userId={id ?? null} />
+                  <CorridasContent userId={id ?? null} readOnly />
                 ) : activeTab === 'records' ? (
-                  <RecordsContent userId={id ?? null} />
+                  <RecordsContent userId={id ?? null} readOnly />
                 ) : (
                   <>
                     {/* ── Body Stats ── */}

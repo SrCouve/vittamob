@@ -20,6 +20,7 @@ try { Audio = require('expo-av').Audio; } catch {}
 
 const THUNDER_ANIM = require('../../assets/thunder-energia.json');
 const RUNNING_ANIM = require('../../assets/running.json');
+const FIST_BUMP_ANIM = require('../../assets/fist-bump.json');
 const SOUND_CHARGING = require('../../assets/sounds/spark-charging.wav');
 const SOUND_RELEASE = require('../../assets/sounds/spark-release.wav');
 
@@ -402,17 +403,27 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
   const renderOtherContent = () => {
     if (isLoading) return <ActivityIndicator color={isParceiros ? '#FF6C24' : '#fff'} size="small" />;
 
+    if (state === 'parceiros') {
+      return (
+        <View style={styles.content}>
+          <LottieView
+            source={FIST_BUMP_ANIM}
+            autoPlay
+            loop
+            speed={0.8}
+            style={{ width: cfg.icon + 10, height: cfg.icon + 10 }}
+          />
+          <Text style={[styles.label, styles.parceirosLabel, { fontSize: cfg.fs }]}>Parceiros</Text>
+        </View>
+      );
+    }
+
     const label =
-      state === 'requested' ? 'Solicitado' :
-      state === 'apoiando' ? 'Apoiando' : 'Parceiros';
+      state === 'requested' ? 'Solicitado' : 'Apoiando';
 
     const icon =
       state === 'requested' ? <ClockIcon size={cfg.icon} /> :
-      state === 'apoiando' ? <SparkIcon size={cfg.icon} color="rgba(255,255,255,0.7)" /> :
-      <View style={{ flexDirection: 'row', gap: -2 }}>
-        <SparkIcon size={cfg.icon - 1} color="#FF6C24" />
-        <SparkIcon size={cfg.icon - 1} color="#FFAC7D" />
-      </View>;
+      <SparkIcon size={cfg.icon} color="rgba(255,255,255,0.7)" />;
 
     return (
       <View style={styles.content}>
@@ -420,7 +431,6 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
         <Text style={[
           styles.label,
           { fontSize: cfg.fs },
-          isParceiros && { color: '#FF6C24' },
           isRequested && { color: 'rgba(255,255,255,0.6)' },
         ]}>
           {label}
@@ -522,6 +532,9 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'Montserrat_700Bold',
     color: '#fff',
+  },
+  parceirosLabel: {
+    color: '#FF6C24',
   },
   costBadge: {
     backgroundColor: 'rgba(255,255,255,0.20)',

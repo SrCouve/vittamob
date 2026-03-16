@@ -847,7 +847,7 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 
 // ─── Run Card ────────────────────────────────────────────────────
 
-function RunCard({ run, index, onShare }: { run: StravaRun; index: number; onShare: (run: StravaRun) => void }) {
+function RunCard({ run, index, onShare, readOnly }: { run: StravaRun; index: number; onShare: (run: StravaRun) => void; readOnly?: boolean }) {
   return (
     <Animated.View
       entering={FadeInDown.delay(Math.min(index * 60, 400)).duration(450)}
@@ -917,9 +917,11 @@ function RunCard({ run, index, onShare }: { run: StravaRun; index: number; onSha
 
         <View style={{ flex: 1 }} />
 
-        <TouchableOpacity onPress={() => onShare(run)} style={s.shareIconBtn} activeOpacity={0.7}>
-          <ShareIcon size={15} />
-        </TouchableOpacity>
+        {!readOnly && (
+          <TouchableOpacity onPress={() => onShare(run)} style={s.shareIconBtn} activeOpacity={0.7}>
+            <ShareIcon size={15} />
+          </TouchableOpacity>
+        )}
       </View>
     </Animated.View>
   );
@@ -948,7 +950,7 @@ function EmptyRuns({ isConnected }: { isConnected: boolean }) {
 
 // ─── Reusable Content (used inside perfil.tsx tab) ──────────────
 
-export function CorridasContent({ userId }: { userId: string | null }) {
+export function CorridasContent({ userId, readOnly }: { userId: string | null; readOnly?: boolean }) {
   const {
     runs, isLoadingRuns, totalSparksEarned, isConnected, isSyncing,
     fetchRuns, syncAndAwardRuns,
@@ -958,15 +960,15 @@ export function CorridasContent({ userId }: { userId: string | null }) {
   useEffect(() => {
     if (userId) {
       fetchRuns(userId);
-      if (isConnected) syncAndAwardRuns(userId);
+      if (isConnected && !readOnly) syncAndAwardRuns(userId);
     }
   }, [userId, isConnected]);
 
   return (
     <>
-      <ShareModal run={shareRun} visible={!!shareRun} onClose={() => setShareRun(null)} />
+      {!readOnly && <ShareModal run={shareRun} visible={!!shareRun} onClose={() => setShareRun(null)} />}
       {/* Sync button */}
-      {isConnected && (
+      {isConnected && !readOnly && (
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 12 }}>
           <TouchableOpacity
             onPress={() => userId && syncAndAwardRuns(userId)}
@@ -1002,7 +1004,7 @@ export function CorridasContent({ userId }: { userId: string | null }) {
           </View>
 
           {runs.map((run, i) => (
-            <RunCard key={run.id} run={run} index={i} onShare={setShareRun} />
+            <RunCard key={run.id} run={run} index={i} onShare={setShareRun} readOnly={readOnly} />
           ))}
         </>
       )}
@@ -1012,7 +1014,7 @@ export function CorridasContent({ userId }: { userId: string | null }) {
 
 // ─── Records Content (used inside perfil.tsx tab) ────────────────
 
-export function RecordsContent({ userId }: { userId: string | null }) {
+export function RecordsContent({ userId, readOnly }: { userId: string | null; readOnly?: boolean }) {
   const { runs, isLoadingRuns, fetchRuns } = useStravaStore();
 
   useEffect(() => {
@@ -1029,7 +1031,7 @@ export function RecordsContent({ userId }: { userId: string | null }) {
 
   return (
     <>
-      <MedalBoardButton />
+      {!readOnly && <MedalBoardButton />}
       <PersonalRecords runs={runs} />
     </>
   );
