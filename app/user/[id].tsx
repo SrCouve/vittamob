@@ -867,7 +867,6 @@ export default function PublicProfileScreen() {
         Alert.alert('Solicitacao de apoio enviada', 'O usuario sera notificado.');
       } else if (result === 'mutual') {
         Alert.alert('Parceiros!', 'Agora voces sao parceiros!');
-        fetchPublicProfile(myUserId, id);
       }
     }, 600);
   }, [myUserId, id, triggerTransferAnimation]);

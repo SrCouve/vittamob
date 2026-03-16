@@ -15,6 +15,13 @@ import LottieView from 'lottie-react-native';
 let Haptics: typeof import('expo-haptics') | null = null;
 try { Haptics = require('expo-haptics'); } catch {}
 
+const hapticImpact = (style: any) => {
+  try { Haptics?.impactAsync(style); } catch {}
+};
+const hapticNotify = (type: any) => {
+  try { Haptics?.notificationAsync(type); } catch {}
+};
+
 let Audio: any = null;
 try { Audio = require('expo-av').Audio; } catch {}
 
@@ -243,9 +250,9 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
       const interval = Math.max(50, 160 - p * 110);
 
       if (Platform.OS !== 'web' && Haptics) {
-        if (p > 0.8) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        else if (p > 0.5) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (p > 0.8) hapticImpact(Haptics?.ImpactFeedbackStyle?.Heavy);
+        else if (p > 0.5) hapticImpact(Haptics?.ImpactFeedbackStyle?.Medium);
+        else hapticImpact(Haptics?.ImpactFeedbackStyle?.Light);
       }
 
       vibTimer.current = setTimeout(vib, interval);
@@ -329,8 +336,8 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
 
     // Haptic — heavy then success with more space
     if (Platform.OS !== 'web' && Haptics) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      setTimeout(() => Haptics?.notificationAsync(Haptics.NotificationFeedbackType.Success), 200);
+      hapticImpact(Haptics?.ImpactFeedbackStyle?.Heavy);
+      setTimeout(() => hapticNotify(Haptics?.NotificationFeedbackType?.Success), 200);
     }
 
     // Longer delay before follow — let the animation breathe
@@ -340,7 +347,7 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
   // ── Tap for non-apoiar states ──
   const handleTap = useCallback(() => {
     if (isLoading) return;
-    if (Platform.OS !== 'web' && Haptics) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS !== 'web' && Haptics) hapticImpact(Haptics?.ImpactFeedbackStyle?.Medium);
 
     if (state === 'requested') {
       Alert.alert('Cancelar solicitacao?', 'A solicitacao sera cancelada.', [
