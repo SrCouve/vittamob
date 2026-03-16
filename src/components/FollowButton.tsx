@@ -414,13 +414,15 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
     if (state === 'parceiros') {
       return (
         <View style={styles.content}>
-          <LottieView
-            source={FIST_BUMP_ANIM}
-            autoPlay
-            loop
-            speed={0.8}
-            style={{ width: cfg.icon + 10, height: cfg.icon + 10 }}
-          />
+          <View style={{ width: cfg.icon + 6, height: cfg.icon + 6, overflow: 'visible', alignItems: 'center', justifyContent: 'center' }}>
+            <LottieView
+              source={FIST_BUMP_ANIM}
+              autoPlay
+              loop
+              speed={0.8}
+              style={{ width: 38, height: 38, marginTop: -4, marginBottom: -4 }}
+            />
+          </View>
           <Text style={[styles.label, styles.parceirosLabel, { fontSize: cfg.fs }]}>Parceiros</Text>
         </View>
       );

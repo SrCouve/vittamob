@@ -879,6 +879,11 @@ export default function PublicProfileScreen() {
   const [hasFetched, setHasFetched] = useState(false);
   const showNotFound = hasFetched && !isLoadingProfile && !profile && id !== myUserId;
 
+  // Force loading state on mount to prevent any flash
+  useEffect(() => {
+    useSocialStore.setState({ isLoadingProfile: true, viewingProfile: null });
+  }, [id]);
+
   return (
     <View style={styles.root}>
       {/* Screen flash overlay */}
