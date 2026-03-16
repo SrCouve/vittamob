@@ -11,8 +11,12 @@ import Svg, {
 } from 'react-native-svg';
 
 // Mapbox token — set to enable map background, leave empty for SVG-only
-// Mapbox public token — loaded from EAS environment secret
-const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN ?? '';
+// Mapbox public token — injected via app.config.js from EAS secret
+let MAPBOX_TOKEN = '';
+try {
+  const Constants = require('expo-constants').default;
+  MAPBOX_TOKEN = Constants?.expoConfig?.extra?.mapboxToken ?? '';
+} catch {}
 
 // ── Google Encoded Polyline Decoder ──
 function decodePolyline(encoded: string): [number, number][] {

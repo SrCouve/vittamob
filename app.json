@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
-      "buildNumber": "74",
+      "buildNumber": "76",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {
@@ -78,6 +78,7 @@
     ],
     "extra": {
       "router": {},
+      "mapboxToken": "MAPBOX_TOKEN_PLACEHOLDER",
       "eas": {
         "projectId": "af4b0142-d6fb-4393-a5db-b9b591984053"
       }
