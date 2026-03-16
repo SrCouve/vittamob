@@ -299,16 +299,20 @@ export default function PublicProfileScreen() {
         fetchMutualFollows(myUserId, id);
         checkMuted(myUserId, id);
       }
-      // Fetch friends count
-      supabase.rpc('count_friends', { p_user_id: id }).then(({ data }) => {
-        if (typeof data === 'number') setTargetFriendsCount(data);
-      });
+      // Fetch friends count (only if we have a valid id)
+      if (id) {
+        supabase.rpc('count_friends', { p_user_id: id }).then(({ data }) => {
+          if (typeof data === 'number') setTargetFriendsCount(data);
+        });
+      }
 
       return () => {
         clearProfile();
         setStravaConnected(false);
         setStravaStats(null);
         setStravaRuns([]);
+        if (sparkCleanupTimer.current) clearTimeout(sparkCleanupTimer.current);
+        if (followDelayTimer.current) clearTimeout(followDelayTimer.current);
       };
     }, [id, myUserId])
   );
@@ -599,6 +603,8 @@ export default function PublicProfileScreen() {
   const maxBar = Math.max(...weeklyKm, 1);
 
   // ── Spark Transfer Animation ──
+  const sparkCleanupTimer = useRef<NodeJS.Timeout | null>(null);
+  const followDelayTimer = useRef<NodeJS.Timeout | null>(null);
   const [sparkFlying, setSparkFlying] = useState(false);
   const sparkY = useSharedValue(0);
   const sparkX = useSharedValue(0);
@@ -774,7 +780,7 @@ export default function PublicProfileScreen() {
     kmBadgeY.value = withDelay(700, withTiming(-55, { duration: 3500, easing: Easing.out(Easing.quad) }));
 
     // Cleanup
-    setTimeout(() => setSparkFlying(false), 2200);
+    sparkCleanupTimer.current = setTimeout(() => setSparkFlying(false), 2200);
   }, []);
 
   const sparkStyle = useAnimatedStyle(() => ({
@@ -857,7 +863,7 @@ export default function PublicProfileScreen() {
     if (!myUserId || !id) return;
     triggerTransferAnimation();
     // Delay the actual follow call so animation is visible
-    setTimeout(async () => {
+    followDelayTimer.current = setTimeout(async () => {
       const result = await followUser(myUserId, id);
       if (result === 'requested') {
         Alert.alert('Solicitacao de apoio enviada', 'O usuario sera notificado.');

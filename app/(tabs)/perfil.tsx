@@ -175,7 +175,7 @@ export default function PerfilScreen() {
   // Body stats (from profile, editable)
   const weight = profile?.weight_kg ?? null;
   const height = profile?.height_cm ?? null;
-  const streakDays = profile?.streak_days ?? 12;
+  const streakDays = profile?.streak_days ?? 0;
 
   // Strava data (real when connected, zeros when not)
   const weeklyKm = strava.isConnected ? strava.weeklyKm : [0, 0, 0, 0, 0, 0, 0];

@@ -516,21 +516,26 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
         p_content: content,
       });
 
+      let commentId: string | undefined;
       if (error) {
         // Fallback: if RPC not deployed yet, use two-step approach
         if (error.message?.includes('function') || error.code === '42883') {
-          const { error: insertErr } = await supabase
+          const { data: inserted, error: insertErr } = await supabase
             .from('post_comments')
-            .insert({ post_id: postId, user_id: userId, content });
+            .insert({ post_id: postId, user_id: userId, content })
+            .select('id')
+            .single();
           if (insertErr) throw insertErr;
+          commentId = inserted?.id;
           await supabase.rpc('increment_comment_count', { p_post_id: postId });
         } else {
           throw error;
         }
+      } else {
+        commentId = data?.comment_id;
       }
 
-      // Optimistic: add comment to local cache immediately
-      const { data: { user } } = await supabase.auth.getUser();
+      // Optimistic: add comment to local cache immediately (use real id from DB)
       const { data: profileData } = await supabase
         .from('profiles')
         .select('name, avatar_url')
@@ -538,7 +543,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
         .single();
 
       const newComment: PostComment = {
-        id: data?.comment_id ?? crypto.randomUUID(),
+        id: commentId ?? crypto.randomUUID(),
         post_id: postId,
         user_id: userId,
         content,

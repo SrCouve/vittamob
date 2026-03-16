@@ -147,12 +147,20 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
   // Refs
   const chargeTimer = useRef<NodeJS.Timeout | null>(null);
   const vibTimer = useRef<NodeJS.Timeout | null>(null);
+  const particleTimer = useRef<NodeJS.Timeout | null>(null);
+  const followTimer = useRef<NodeJS.Timeout | null>(null);
   const chargingSound = useRef<any>(null);
   const lottieRef = useRef<LottieView>(null);
   const runnerRef = useRef<LottieView>(null);
 
   useEffect(() => {
-    return () => { chargingSound.current?.unloadAsync(); };
+    return () => {
+      chargingSound.current?.unloadAsync();
+      if (particleTimer.current) clearTimeout(particleTimer.current);
+      if (followTimer.current) clearTimeout(followTimer.current);
+      if (chargeTimer.current) clearTimeout(chargeTimer.current);
+      if (vibTimer.current) clearTimeout(vibTimer.current);
+    };
   }, []);
 
   // Reset completed state when relationship changes
@@ -313,7 +321,7 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
 
     // Particles — longer duration
     setShowParticles(true);
-    setTimeout(() => setShowParticles(false), 1200);
+    particleTimer.current = setTimeout(() => setShowParticles(false), 1200);
 
     // Lottie thunder
     lottieRef.current?.reset();
@@ -326,7 +334,7 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
     }
 
     // Longer delay before follow — let the animation breathe
-    setTimeout(() => onFollow(), 800);
+    followTimer.current = setTimeout(() => onFollow(), 800);
   }, [onFollow]);
 
   // ── Tap for non-apoiar states ──

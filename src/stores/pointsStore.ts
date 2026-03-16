@@ -47,22 +47,23 @@ export const usePointsStore = create<PointsState>((set, get) => ({
   },
 
   awardPoints: async (userId, amount, type, description) => {
-    // Insert ledger entry
-    await supabase.from('points_ledger').insert({
+    const { error: insertErr } = await supabase.from('points_ledger').insert({
       user_id: userId,
       amount,
       type,
       description,
     });
+    if (insertErr) return;
 
-    // Update balance
-    const { data } = await supabase.rpc('increment_points', {
+    const { error: rpcErr } = await supabase.rpc('increment_points', {
       user_id_input: userId,
       amount_input: amount,
     });
+    if (rpcErr) {
+      console.error('awardPoints: increment_points failed', rpcErr);
+      return;
+    }
 
-    // Refresh local state
-    const currentBalance = get().balance;
-    set({ balance: currentBalance + amount });
+    set({ balance: get().balance + amount });
   },
 }));

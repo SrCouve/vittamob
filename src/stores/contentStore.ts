@@ -26,6 +26,7 @@ interface LessonProgress {
   watch_seconds: number;
   completed: boolean;
   completed_at: string | null;
+  updated_at: string | null;
 }
 
 interface ContentState {
@@ -75,12 +76,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
   fetchProgress: async (userId) => {
     const { data } = await supabase
       .from('user_lesson_progress')
-      .select('lesson_id, watch_seconds, completed, completed_at')
+      .select('lesson_id, watch_seconds, completed, completed_at, updated_at')
       .eq('user_id', userId);
 
     const progressMap: Record<string, LessonProgress> = {};
     (data ?? []).forEach((p: any) => {
-      progressMap[p.lesson_id] = p;
+      progressMap[p.lesson_id] = {
+        lesson_id: p.lesson_id,
+        watch_seconds: p.watch_seconds,
+        completed: p.completed,
+        completed_at: p.completed_at ?? null,
+        updated_at: p.updated_at ?? null,
+      };
     });
     set({ progress: progressMap });
   },
@@ -94,6 +101,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
       completed_at: completed ? new Date().toISOString() : null,
     });
 
+    const now = new Date().toISOString();
     const progress = get().progress;
     set({
       progress: {
@@ -102,7 +110,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
           lesson_id: lessonId,
           watch_seconds: watchSeconds,
           completed,
-          completed_at: completed ? new Date().toISOString() : null,
+          completed_at: completed ? now : null,
+          updated_at: now,
         },
       },
     });
@@ -125,7 +134,7 @@ export const useContentStore = create<ContentState>((set, get) => ({
     const { progress, lessons, modules } = get();
     const recent = Object.values(progress)
       .filter((p) => !p.completed && p.watch_seconds > 0)
-      .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''));
+      .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''));
 
     if (recent.length === 0) return null;
 

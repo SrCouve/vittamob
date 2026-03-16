@@ -50,36 +50,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signUpWithEmail: async (email, password, name) => {
     set({ isLoading: true });
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name } },
-    });
-    if (error) {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { name } },
+      });
+      if (error) return { error: error.message };
+
+      // Trigger handle_new_user already creates profile; add welcome bonus only
+      if (data.user) {
+        const { error: updateErr } = await supabase
+          .from('profiles')
+          .update({ points_balance: 100 })
+          .eq('id', data.user.id);
+        if (updateErr) {
+          console.warn('signUp: failed to set welcome bonus on profile', updateErr);
+        }
+        const { error: ledgerErr } = await supabase.from('points_ledger').insert({
+          user_id: data.user.id,
+          amount: 100,
+          type: 'welcome_bonus',
+          description: 'Bônus de boas-vindas',
+        });
+        if (ledgerErr) {
+          console.warn('signUp: failed to insert welcome bonus ledger', ledgerErr);
+        }
+      }
+      return { error: null };
+    } finally {
       set({ isLoading: false });
-      return { error: error.message };
     }
-
-    // Create profile row
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        id: data.user.id,
-        name,
-        avatar_url: null,
-        points_balance: 100, // Welcome bonus
-      });
-
-      // Log welcome bonus points
-      await supabase.from('points_ledger').insert({
-        user_id: data.user.id,
-        amount: 100,
-        type: 'welcome_bonus',
-        description: 'Bônus de boas-vindas',
-      });
-    }
-
-    set({ isLoading: false });
-    return { error: null };
   },
 
   signOut: async () => {

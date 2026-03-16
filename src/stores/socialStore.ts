@@ -194,8 +194,11 @@ export const useSocialStore = create<SocialState>((set, get) => ({
     // Set loading for this specific user
     set({ isFollowLoading: { ...get().isFollowLoading, [followingId]: true } });
 
-    // Optimistic update on viewingProfile
+    // Capture previous values BEFORE any optimistic updates
     const prevProfile = get().viewingProfile;
+    const prevFollowingCount = get().myFollowingCount;
+
+    // Optimistic update on viewingProfile
     if (prevProfile && prevProfile.id === followingId) {
       if (prevProfile.is_private && !prevProfile.relationship.they_follow) {
         // Private profile: optimistic → i_requested = true (not i_follow)
@@ -222,11 +225,9 @@ export const useSocialStore = create<SocialState>((set, get) => ({
           },
         });
         // Optimistic increment own following count only for direct follows
-        set({ myFollowingCount: get().myFollowingCount + 1 });
+        set({ myFollowingCount: prevFollowingCount + 1 });
       }
     }
-
-    const prevFollowingCount = get().myFollowingCount;
 
     try {
       const { data, error } = await supabase.rpc('follow_user', {

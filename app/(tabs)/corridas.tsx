@@ -36,6 +36,7 @@ import {
   computePersonalRecords, getCategoryLabel, getCategoryFullLabel, isCompetitive,
 } from '../../src/stores/stravaStore';
 import { router as navRouter } from 'expo-router';
+import { supabase } from '../../src/lib/supabase';
 // Lazy-load native modules
 let ImagePicker: any = null;
 let Sharing: any = null;
@@ -951,31 +952,62 @@ function EmptyRuns({ isConnected }: { isConnected: boolean }) {
 // ─── Reusable Content (used inside perfil.tsx tab) ──────────────
 
 export function CorridasContent({ userId, readOnly }: { userId: string | null; readOnly?: boolean }) {
-  const {
-    runs, isLoadingRuns, totalSparksEarned, isConnected, isSyncing,
-    fetchRuns, syncAndAwardRuns,
-  } = useStravaStore();
+  // When readOnly, use LOCAL state to avoid corrupting the global stravaStore
+  const store = useStravaStore();
+  const [localRuns, setLocalRuns] = useState<StravaRun[]>([]);
+  const [localLoading, setLocalLoading] = useState(false);
+  const [localSparks, setLocalSparks] = useState(0);
   const [shareRun, setShareRun] = useState<StravaRun | null>(null);
 
+  const runs = readOnly ? localRuns : store.runs;
+  const isLoadingRuns = readOnly ? localLoading : store.isLoadingRuns;
+  const totalSparksEarned = readOnly ? localSparks : store.totalSparksEarned;
+
   useEffect(() => {
-    if (userId) {
-      fetchRuns(userId);
-      if (isConnected && !readOnly) syncAndAwardRuns(userId);
+    if (!userId) return;
+    if (readOnly) {
+      // Fetch directly into local state — never touch the global store
+      setLocalLoading(true);
+      supabase
+        .from('strava_awarded_runs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('activity_date', { ascending: false })
+        .limit(100)
+        .then(({ data, error }) => {
+          const mapped: StravaRun[] = (error ? [] : (data ?? [])).map((r: any) => ({
+            id: r.id,
+            strava_activity_id: r.strava_activity_id,
+            activity_name: r.activity_name ?? 'Corrida',
+            activity_date: r.activity_date,
+            distance_km: Number(r.distance_km),
+            moving_time_seconds: r.moving_time_seconds ?? 0,
+            average_speed: Number(r.average_speed) ?? 0,
+            sparks_awarded: r.sparks_awarded,
+            workout_type: r.workout_type ?? null,
+          }));
+          setLocalRuns(mapped);
+          setLocalSparks(mapped.reduce((sum, r) => sum + r.sparks_awarded, 0));
+          setLocalLoading(false);
+        });
+    } else {
+      store.fetchRuns(userId);
+      if (store.isConnected) store.syncAndAwardRuns(userId);
     }
-  }, [userId, isConnected]);
+  }, [userId, readOnly, store.isConnected]);
 
   return (
     <>
       {!readOnly && <ShareModal run={shareRun} visible={!!shareRun} onClose={() => setShareRun(null)} />}
       {/* Sync button */}
-      {isConnected && !readOnly && (
+      {store.isConnected && !readOnly && (
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 12 }}>
           <TouchableOpacity
-            onPress={() => userId && syncAndAwardRuns(userId)}
-            disabled={isSyncing}
-            style={[s.syncBtn, isSyncing && { opacity: 0.4 }]}
+            onPress={() => userId && store.syncAndAwardRuns(userId)}
+            disabled={store.isSyncing}
+            style={[s.syncBtn, store.isSyncing && { opacity: 0.4 }]}
           >
-            {isSyncing ? (
+            {store.isSyncing ? (
               <ActivityIndicator size="small" color="#FF6C24" />
             ) : (
               <SyncIcon size={18} />
@@ -991,7 +1023,7 @@ export function CorridasContent({ userId, readOnly }: { userId: string | null; r
           <Text style={s.loadingText}>Sincronizando corridas...</Text>
         </View>
       ) : runs.length === 0 ? (
-        <EmptyRuns isConnected={isConnected} />
+        <EmptyRuns isConnected={store.isConnected} />
       ) : (
         <>
           <StatsHero runs={runs} totalSparks={totalSparksEarned} />
@@ -1015,11 +1047,42 @@ export function CorridasContent({ userId, readOnly }: { userId: string | null; r
 // ─── Records Content (used inside perfil.tsx tab) ────────────────
 
 export function RecordsContent({ userId, readOnly }: { userId: string | null; readOnly?: boolean }) {
-  const { runs, isLoadingRuns, fetchRuns } = useStravaStore();
+  const store = useStravaStore();
+  const [localRuns, setLocalRuns] = useState<StravaRun[]>([]);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  const runs = readOnly ? localRuns : store.runs;
+  const isLoadingRuns = readOnly ? localLoading : store.isLoadingRuns;
 
   useEffect(() => {
-    if (userId) fetchRuns(userId);
-  }, [userId]);
+    if (!userId) return;
+    if (readOnly) {
+      setLocalLoading(true);
+      supabase
+        .from('strava_awarded_runs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('activity_date', { ascending: false })
+        .limit(100)
+        .then(({ data, error }) => {
+          const mapped: StravaRun[] = (error ? [] : (data ?? [])).map((r: any) => ({
+            id: r.id,
+            strava_activity_id: r.strava_activity_id,
+            activity_name: r.activity_name ?? 'Corrida',
+            activity_date: r.activity_date,
+            distance_km: Number(r.distance_km),
+            moving_time_seconds: r.moving_time_seconds ?? 0,
+            average_speed: Number(r.average_speed) ?? 0,
+            sparks_awarded: r.sparks_awarded,
+            workout_type: r.workout_type ?? null,
+          }));
+          setLocalRuns(mapped);
+          setLocalLoading(false);
+        });
+    } else {
+      store.fetchRuns(userId);
+    }
+  }, [userId, readOnly]);
 
   if (isLoadingRuns && runs.length === 0) {
     return (

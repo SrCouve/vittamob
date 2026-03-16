@@ -146,7 +146,10 @@ export default function FollowersScreen() {
         {
           text: 'Remover',
           style: 'destructive',
-          onPress: () => removeFollower(myId, follower.id),
+          onPress: () => {
+            removeFollower(myId, follower.id);
+            setItems(prev => prev.filter(f => f.id !== follower.id));
+          },
         },
       ]
     );
