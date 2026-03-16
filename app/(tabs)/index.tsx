@@ -96,8 +96,14 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>Olá, {firstName}</Text>
         </View>
         <TouchableOpacity onPress={() => router.push('/(tabs)/perfil')} style={styles.avatar}>
-          <LinearGradient colors={['#FF6C24', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-          <Text style={styles.avatarText}>K</Text>
+          {profile?.avatar_url ? (
+            <Image source={{ uri: profile.avatar_url }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+          ) : (
+            <>
+              <LinearGradient colors={['#FF6C24', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+              <Text style={styles.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
+            </>
+          )}
         </TouchableOpacity>
       </Animated.View>
 

@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle, Polyline } from 'react-native-svg';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useSocialStore, type UserListItem } from '../../src/stores/socialStore';
+import { VerifiedBadge } from '../../src/components/VerifiedBadge';
 import { supabase } from '../../src/lib/supabase';
 
 // ── Icons ──
@@ -59,7 +60,10 @@ function UserCard({ item, onLongPress }: { item: UserListItem; onLongPress?: () 
       </View>
 
       <View style={styles.userInfo}>
-        <Text style={styles.userName} numberOfLines={1}>{item.name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Text style={styles.userName} numberOfLines={1}>{item.name}</Text>
+          {item.is_verified && <VerifiedBadge size={14} />}
+        </View>
         {item.bio ? (
           <Text style={styles.userBio} numberOfLines={1}>{item.bio}</Text>
         ) : (

@@ -18,6 +18,7 @@ export interface PublicProfile {
   avatar_url: string | null;
   bio: string | null;
   is_private: boolean;
+  is_verified?: boolean;
   interests?: string[];
   points_balance?: number;
   streak_days?: number;
@@ -40,6 +41,7 @@ export interface UserListItem {
   avatar_url: string | null;
   bio: string | null;
   is_private: boolean;
+  is_verified?: boolean;
   followers_count: number;
 }
 
@@ -162,6 +164,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         avatar_url: row.avatar_url ?? null,
         bio: row.bio ?? null,
         is_private: row.is_private ?? false,
+        is_verified: row.is_verified ?? false,
         interests: row.interests ?? [],
         points_balance: row.points_balance ?? 0,
         streak_days: row.streak_days ?? 0,
@@ -621,6 +624,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         avatar_url: r.avatar_url ?? null,
         bio: r.bio ?? null,
         is_private: r.is_private ?? false,
+        is_verified: r.is_verified ?? false,
         followers_count: r.followers_count ?? 0,
       }));
 
@@ -658,6 +662,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         avatar_url: r.avatar_url ?? null,
         bio: r.bio ?? null,
         is_private: r.is_private ?? false,
+        is_verified: r.is_verified ?? false,
         followers_count: r.followers_count ?? 0,
       }));
 
@@ -693,6 +698,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         avatar_url: r.avatar_url ?? null,
         bio: r.bio ?? null,
         is_private: r.is_private ?? false,
+        is_verified: r.is_verified ?? false,
         followers_count: r.followers_count ?? 0,
       }));
 
@@ -773,6 +779,7 @@ export const useSocialStore = create<SocialState>((set, get) => ({
         avatar_url: r.avatar_url ?? null,
         bio: r.bio ?? null,
         is_private: r.is_private ?? false,
+        is_verified: r.is_verified ?? false,
         followers_count: r.followers_count ?? 0,
       }));
 

@@ -10,11 +10,13 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Svg, { Path, Circle, Polyline, Line, Rect } from 'react-native-svg';
 import { router, useFocusEffect } from 'expo-router';
 import { GlassCard } from '../../src/components/GlassCard';
+import { VerifiedBadge } from '../../src/components/VerifiedBadge';
 import LottieView from 'lottie-react-native';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUserStore } from '../../src/stores/userStore';
 import { useStravaStore, STRAVA_CLIENT_ID } from '../../src/stores/stravaStore';
 import { useSocialStore } from '../../src/stores/socialStore';
+import { useCommunityStore } from '../../src/stores/communityStore';
 import { CorridasContent, RecordsContent } from './corridas';
 
 // Lazy-load native modules (not available in Expo Go)
@@ -33,6 +35,8 @@ const HEIGHT_ANIM = require('../../assets/height.json');
 const SCALE_ANIM = require('../../assets/kitchen-scale.json');
 const FIRE_ANIM = require('../../assets/fire-emoji.json');
 const CELEBRATION_ANIM = require('../../assets/celebration.json');
+const CALENDAR_ANIM = require('../../assets/calendar-weekly.json');
+const HIKER_ANIM = require('../../assets/hiker-journey.json');
 
 const { width: SW } = Dimensions.get('window');
 
@@ -150,6 +154,32 @@ export default function PerfilScreen() {
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('perfil');
   const { myFollowersCount, myFollowingCount, myFriendsCount, fetchMyCounts, followRequestsCount, fetchFollowRequests } = useSocialStore();
+  const { createPost } = useCommunityStore();
+
+  const handleRepostWeekly = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const total = strava.weeklyTotal;
+    const goal = strava.weeklyGoal;
+    const pct = goal > 0 ? Math.round((total / goal) * 100) : 0;
+    const success = await createPost(session.user.id, 'weekly_goal' as any, null as any, {
+      weekly_total: total,
+      weekly_goal: goal,
+      progress_pct: Math.min(pct, 100),
+    });
+    if (success) Alert.alert('Publicado!', 'Sua meta semanal foi postada no social.');
+  }, [session?.user?.id, strava.weeklyTotal, strava.weeklyGoal, createPost]);
+
+  const handleRepostJourney = useCallback(async () => {
+    if (!session?.user?.id) return;
+    const success = await createPost(session.user.id, 'journey_milestone' as any, null as any, {
+      lifetime_km: strava.lifetimeDistanceKm,
+      lifetime_runs: strava.lifetimeRunCount,
+      lifetime_hours: strava.lifetimeMovingTimeHours,
+      avg_pace: strava.avgPace,
+      lifetime_elevation: strava.lifetimeElevationM,
+    });
+    if (success) Alert.alert('Publicado!', 'Sua jornada foi postada no social.');
+  }, [session?.user?.id, strava, createPost]);
 
   const displayName = profile?.name ?? 'Usuário';
   const initial = displayName.charAt(0).toUpperCase();
@@ -305,7 +335,10 @@ export default function PerfilScreen() {
 
             {/* Name & Bio */}
             <View style={styles.nameSection}>
-              <Text style={styles.userName}>{displayName}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Text style={styles.userName}>{displayName}</Text>
+                {profile?.is_verified && <VerifiedBadge size={18} />}
+              </View>
               <Text style={styles.userBio} numberOfLines={2}>{bio}</Text>
 
               {/* Streak badge */}
@@ -505,8 +538,16 @@ export default function PerfilScreen() {
             <GlassCard style={styles.weeklyCard}>
               <View style={styles.weeklyHeader}>
                 <View style={styles.weeklyTitleRow}>
-                  <RunIcon />
+                  <LottieView source={CALENDAR_ANIM} autoPlay loop={false} speed={0.6} style={{ width: 26, height: 26 }} />
                   <Text style={styles.weeklyTitle}>Meta Semanal</Text>
+                  <TouchableOpacity onPress={handleRepostWeekly} activeOpacity={0.7} style={styles.miniShareBtn}>
+                    <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#FF6C24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <Circle cx="9" cy="7" r="4" />
+                      <Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                      <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </Svg>
+                  </TouchableOpacity>
                 </View>
                 <TouchableOpacity
                   style={styles.stravaBadge}
@@ -578,6 +619,7 @@ export default function PerfilScreen() {
                   );
                 })}
               </View>
+
             </GlassCard>
           </Animated.View>
 
@@ -586,9 +628,19 @@ export default function PerfilScreen() {
             <GlassCard style={styles.statsCard}>
               {/* Title */}
               <View style={styles.statsTitleRow}>
-                <RunIcon />
+                <LottieView source={HIKER_ANIM} autoPlay={true} loop={true} speed={0.8} style={{ width: 28, height: 28 }} renderMode="AUTOMATIC" />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.statsTitle}>Sua Jornada</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.statsTitle}>Sua Jornada</Text>
+                    <TouchableOpacity onPress={handleRepostJourney} activeOpacity={0.7} style={styles.miniShareBtn}>
+                      <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#FF6C24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <Circle cx="9" cy="7" r="4" />
+                        <Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                        <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </Svg>
+                    </TouchableOpacity>
+                  </View>
                   <Text style={styles.statsSubtitle}>histórico lifetime</Text>
                 </View>
                 <View style={styles.stravaBadge}>
@@ -662,6 +714,7 @@ export default function PerfilScreen() {
                   })}
                 </View>
               )}
+
             </GlassCard>
           </Animated.View>
         </>
@@ -900,6 +953,14 @@ const styles = StyleSheet.create({
     gap: 8, paddingVertical: 16, marginTop: 8, minHeight: 44,
   },
   logoutText: { fontFamily: 'Montserrat_500Medium', color: 'rgba(239,68,68,0.7)', fontSize: 14 },
+
+  // Mini share button next to title
+  miniShareBtn: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(255,108,36,0.10)',
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.20)',
+    justifyContent: 'center', alignItems: 'center',
+  },
 
   // Tab Switcher
   tabSwitcher: {

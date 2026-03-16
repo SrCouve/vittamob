@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 
-export type PostType = 'lesson_complete' | 'module_complete' | 'streak' | 'challenge_join' | 'text' | 'photo' | 'run_complete';
+export type PostType = 'lesson_complete' | 'module_complete' | 'streak' | 'challenge_join' | 'text' | 'photo' | 'run_complete' | 'weekly_goal' | 'journey_milestone';
 export type FeedFilter = 'all' | 'conquistas' | 'desafios' | 'fotos';
 
 export interface CommunityPost {

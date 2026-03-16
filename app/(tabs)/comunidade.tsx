@@ -38,6 +38,7 @@ import { useRouter } from 'expo-router';
 import { Logo } from '../../src/components/Logo';
 import { GlassCard } from '../../src/components/GlassCard';
 import { RoutePreview } from '../../src/components/RoutePreview';
+import { VerifiedBadge } from '../../src/components/VerifiedBadge';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { useAuthStore } from '../../src/stores/authStore';
@@ -227,6 +228,19 @@ function getPostText(post: CommunityPost): string {
       return `entrou no desafio "${post.metadata?.challenge_title ?? 'um desafio'}"`;
     case 'run_complete':
       return `completou ${post.metadata?.distance_km?.toFixed(1)}km em ${formatDurationShort(post.metadata?.moving_time_seconds)}`;
+    case 'weekly_goal': {
+      const pct = post.metadata?.progress_pct ?? 0;
+      const total = post.metadata?.weekly_total?.toFixed(1) ?? '0';
+      return pct >= 100
+        ? `bateu a meta semanal! ${total}km corridos 🔥`
+        : `ja correu ${total}km essa semana, ${pct}% da meta!`;
+    }
+    case 'journey_milestone': {
+      const km = post.metadata?.lifetime_km ?? 0;
+      const runs = post.metadata?.lifetime_runs ?? 0;
+      const pace = post.metadata?.avg_pace ?? '--';
+      return `ja correu ${km >= 1000 ? (km/1000).toFixed(1) + 'k' : Math.round(km)}km em ${runs} corridas e tem um pace medio de ${pace}/km`;
+    }
     case 'text':
       return post.content ?? '';
     default:
@@ -245,7 +259,7 @@ function getInitials(name: string): string {
 
 function matchesFilter(post: CommunityPost, filter: FeedFilter): boolean {
   if (filter === 'all') return true;
-  if (filter === 'conquistas') return ['lesson_complete', 'module_complete', 'streak', 'run_complete'].includes(post.type);
+  if (filter === 'conquistas') return ['lesson_complete', 'module_complete', 'streak', 'run_complete', 'weekly_goal', 'journey_milestone'].includes(post.type);
   if (filter === 'desafios') return post.type === 'challenge_join';
   if (filter === 'fotos') return post.type === 'photo' || !!post.image_url;
   return true;
@@ -303,7 +317,7 @@ function UserAvatar({ name, avatarUrl, size = 36, ring = false }: { name: string
 // Backend: query profiles ORDER BY points_balance DESC LIMIT 5
 // For now uses data from the community posts (most energia)
 
-function TopMembersSection({ members, onMemberPress }: { members: TopMember[]; onMemberPress: (userId: string) => void }) {
+function TopMembersSection({ members, onMemberPress, verifiedIds }: { members: TopMember[]; onMemberPress: (userId: string) => void; verifiedIds: Set<string> }) {
   if (members.length === 0) return null;
 
   return (
@@ -336,7 +350,10 @@ function TopMembersSection({ members, onMemberPress }: { members: TopMember[]; o
               </View>
             )}
             <UserAvatar name={u.user_name} avatarUrl={u.avatar_url} size={40} ring={i === 0} />
-            <Text style={s.topName} numberOfLines={1}>{u.user_name.split(' ')[0]}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+              <Text style={s.topName} numberOfLines={1}>{u.user_name.split(' ')[0]}</Text>
+              {verifiedIds.has(u.user_id) && <VerifiedBadge size={12} />}
+            </View>
             {u.weekly_km > 0 && (
               <Text style={s.topKm}>{u.weekly_km.toFixed(1)} km</Text>
             )}
@@ -407,7 +424,7 @@ function AchievementCard({ post }: { post: CommunityPost }) {
 
 // ─── Post Text with @Mentions ───────────────────────────────────
 
-function MentionChip({ mention, onPress }: { mention: { userId: string; name: string; avatar_url?: string }; onPress: () => void }) {
+function MentionChip({ mention, onPress, isVerified }: { mention: { userId: string; name: string; avatar_url?: string }; onPress: () => void; isVerified?: boolean }) {
   const firstName = mention.name.split(' ')[0];
   const initial = firstName.charAt(0).toUpperCase();
   return (
@@ -437,6 +454,7 @@ function MentionChip({ mention, onPress }: { mention: { userId: string; name: st
       <Text style={{ fontFamily: FONTS.montserrat.bold, color: '#FF6C24', fontSize: 14 }}>
         {firstName}
       </Text>
+      {isVerified && <VerifiedBadge size={10} />}
     </TouchableOpacity>
   );
 }
@@ -445,10 +463,12 @@ function PostText({
   text,
   metadata,
   onMentionPress,
+  verifiedIds,
 }: {
   text: string;
   metadata: Record<string, any>;
   onMentionPress: (userId: string) => void;
+  verifiedIds?: Set<string>;
 }) {
   const mentionList = metadata?.mentions as { userId: string; name: string; avatar_url?: string }[] | undefined;
 
@@ -475,6 +495,7 @@ function PostText({
           key={key++}
           mention={mention}
           onPress={() => onMentionPress(mention.userId)}
+          isVerified={verifiedIds?.has(mention.userId)}
         />
       );
       remaining = remaining.substring(idx + mentionTag.length);
@@ -500,6 +521,8 @@ function PostCard({
   onDelete,
   onUserPress,
   index,
+  isVerified,
+  verifiedIds,
 }: {
   post: CommunityPost;
   userId: string | null;
@@ -508,6 +531,8 @@ function PostCard({
   onDelete: (postId: string) => void;
   onUserPress: (userId: string) => void;
   index: number;
+  isVerified?: boolean;
+  verifiedIds?: Set<string>;
 }) {
   const isAutoPost = post.type !== 'text';
   const isBigAchievement = post.type === 'module_complete' || post.type === 'streak';
@@ -602,8 +627,9 @@ function PostCard({
         </TouchableOpacity>
         <View style={s.postHeaderText}>
           <View style={s.postNameRow}>
-            <TouchableOpacity activeOpacity={0.7} onPress={() => onUserPress(post.user_id)}>
+            <TouchableOpacity activeOpacity={0.7} onPress={() => onUserPress(post.user_id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Text style={s.postUserName}>{post.user_name}</Text>
+              {isVerified && <VerifiedBadge size={14} />}
             </TouchableOpacity>
             {isAutoPost && (
               <View style={[s.postTypeBadge, isBigAchievement && s.postTypeBadgeBig]}>
@@ -612,6 +638,8 @@ function PostCard({
                 {post.type === 'streak' && <FireIcon size={11} color="#FFAC7D" />}
                 {post.type === 'challenge_join' && <TrophyIcon size={11} color="#FF6C24" />}
                 {post.type === 'run_complete' && <RunIcon size={11} color="#FF8540" />}
+                {post.type === 'weekly_goal' && <SparkIcon size={11} color="#FF6C24" />}
+                {post.type === 'journey_milestone' && <RunIcon size={11} color="#FFAC7D" />}
               </View>
             )}
           </View>
@@ -653,6 +681,7 @@ function PostCard({
             text={post.content ?? ''}
             metadata={post.metadata}
             onMentionPress={onUserPress}
+            verifiedIds={verifiedIds}
           />
         )}
       </View>
@@ -768,6 +797,81 @@ function PostCard({
         </Animated.View>
       )}
 
+      {/* Weekly Goal card */}
+      {post.type === 'weekly_goal' && post.metadata?.weekly_total != null && (
+        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.weeklyPostCard}>
+          <LinearGradient
+            colors={['rgba(255,108,36,0.10)', 'rgba(255,108,36,0.03)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={s.weeklyPostHeader}>
+            <LottieView source={RUNNING_ANIM} autoPlay loop speed={1.2} style={{ width: 44, height: 44 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.weeklyPostDistance}>
+                {post.metadata.weekly_total.toFixed(1)}
+                <Text style={s.weeklyPostUnit}> km</Text>
+              </Text>
+              <Text style={s.weeklyPostLabel}>corridos essa semana</Text>
+            </View>
+          </View>
+          {/* Progress bar */}
+          <View style={s.weeklyPostBarBg}>
+            <LinearGradient
+              colors={['#FF6C24', '#FF8540', '#FFAC7D']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[s.weeklyPostBarFill, { width: `${Math.min(post.metadata.progress_pct ?? 0, 100)}%` }]}
+            />
+          </View>
+          <View style={s.weeklyPostFooter}>
+            <Text style={s.weeklyPostPct}>{post.metadata.progress_pct ?? 0}%</Text>
+            <Text style={s.weeklyPostGoal}>meta: {post.metadata.weekly_goal ?? 20}km</Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Journey Milestone card */}
+      {post.type === 'journey_milestone' && post.metadata?.lifetime_km != null && (
+        <Animated.View entering={FadeInDown.delay(100).duration(400)} style={s.journeyPostCard}>
+          <LinearGradient
+            colors={['rgba(255,172,125,0.10)', 'rgba(255,108,36,0.03)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={s.journeyPostHeader}>
+            <LottieView source={RUNNING_ANIM} autoPlay loop speed={0.8} style={{ width: 48, height: 48 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.journeyPostTitle}>Minha Jornada</Text>
+              <Text style={s.journeyPostKm}>
+                {post.metadata.lifetime_km >= 1000
+                  ? `${(post.metadata.lifetime_km / 1000).toFixed(1)}k`
+                  : Math.round(post.metadata.lifetime_km).toLocaleString('pt-BR')}
+                <Text style={s.journeyPostUnit}> km</Text>
+              </Text>
+            </View>
+          </View>
+          <View style={s.journeyPostStats}>
+            <View style={s.journeyPostStat}>
+              <Text style={s.journeyPostStatValue}>{post.metadata.lifetime_runs ?? 0}</Text>
+              <Text style={s.journeyPostStatLabel}>corridas</Text>
+            </View>
+            <View style={s.journeyPostDivider} />
+            <View style={s.journeyPostStat}>
+              <Text style={s.journeyPostStatValue}>{post.metadata.lifetime_hours ?? 0}h</Text>
+              <Text style={s.journeyPostStatLabel}>tempo</Text>
+            </View>
+            <View style={s.journeyPostDivider} />
+            <View style={s.journeyPostStat}>
+              <Text style={s.journeyPostStatValue}>{post.metadata.avg_pace ?? '--'}</Text>
+              <Text style={s.journeyPostStatLabel}>pace medio</Text>
+            </View>
+          </View>
+        </Animated.View>
+      )}
+
       {/* Actions */}
       <View style={s.postActions}>
         <TouchableOpacity style={s.actionBtn} activeOpacity={0.6} onPress={handleEnergia}>
@@ -812,10 +916,12 @@ function CommentsSection({
   postId,
   userId,
   onClose,
+  verifiedIds,
 }: {
   postId: string;
   userId: string | null;
   onClose: () => void;
+  verifiedIds?: Set<string>;
 }) {
   const { comments, fetchComments, addComment, deleteComment } = useCommunityStore();
   const [text, setText] = useState('');
@@ -921,9 +1027,13 @@ function CommentsSection({
           <View key={c.id} style={s.commentRow}>
             <UserAvatar name={c.user_name} avatarUrl={c.user_avatar} size={28} />
             <View style={s.commentContent}>
-              <Text style={s.commentMsg}>
-                <Text style={s.commentName}>{c.user_name}</Text> {c.content}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
+                <Text style={s.commentMsg}>
+                  <Text style={s.commentName}>{c.user_name}</Text>
+                </Text>
+                {verifiedIds?.has(c.user_id) && <VerifiedBadge size={12} />}
+                <Text style={s.commentMsg}>{c.content}</Text>
+              </View>
               <Text style={s.commentTime}>{timeAgo(c.created_at)}</Text>
             </View>
             {userId && c.user_id === userId && (
@@ -950,10 +1060,10 @@ function CommentsSection({
 
       {/* Input */}
       {userId && (
-        <View style={{ zIndex: 10, position: 'relative' }}>
-          {/* Mention dropdown for comments — floats above input */}
+        <View style={{ zIndex: 10 }}>
+          {/* Mention dropdown for comments — inline above input */}
           {mentionQuery !== null && mentionResults.length > 0 && (
-            <View style={s.mentionDropdown}>
+            <View style={s.mentionDropdownInline}>
               {!isWeb && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
               <LinearGradient
                 colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
@@ -1315,6 +1425,14 @@ export default function ComunidadeScreen() {
   const { profile } = useUserStore();
   const userId = user?.id ?? null;
 
+  // Fetch verified user IDs for badge display
+  const [verifiedIds, setVerifiedIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    supabase.from('profiles').select('id').eq('is_verified', true).then(({ data }) => {
+      if (data) setVerifiedIds(new Set(data.map((p: any) => p.id)));
+    });
+  }, []);
+
   const handleUserPress = useCallback((targetUserId: string) => {
     if (targetUserId === session?.user?.id) {
       router.push('/(tabs)/perfil' as any);
@@ -1420,7 +1538,7 @@ export default function ComunidadeScreen() {
         {posts.length > 0 && <CommunityStatsBanner posts={posts} />}
 
         {/* ══ TOP MEMBERS ══ */}
-        {topMembers.length > 0 && <TopMembersSection members={topMembers} onMemberPress={handleUserPress} />}
+        {topMembers.length > 0 && <TopMembersSection members={topMembers} onMemberPress={handleUserPress} verifiedIds={verifiedIds} />}
 
         {/* ══ COMPOSE ══ */}
         <Animated.View entering={FadeInDown.delay(150).duration(500)}>
@@ -1461,9 +1579,11 @@ export default function ComunidadeScreen() {
                   onDelete={handleDelete}
                   onUserPress={handleUserPress}
                   index={i}
+                  isVerified={verifiedIds.has(post.user_id)}
+                  verifiedIds={verifiedIds}
                 />
                 {activeComments === post.id && (
-                  <CommentsSection postId={post.id} userId={userId} onClose={() => setActiveComments(null)} />
+                  <CommentsSection postId={post.id} userId={userId} onClose={() => setActiveComments(null)} verifiedIds={verifiedIds} />
                 )}
               </React.Fragment>
             ))}
@@ -1650,8 +1770,8 @@ const s = StyleSheet.create({
 
   // Comments Sheet
   commentsSheet: {
-    borderRadius: 18, overflow: 'hidden', borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.1)', marginBottom: 14, marginTop: -6, maxHeight: 380,
+    borderRadius: 18, borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.1)', marginBottom: 14, marginTop: -6, maxHeight: 420,
   },
   commentsHandle: {
     width: 32, height: 3, borderRadius: 2,
@@ -1753,6 +1873,13 @@ const s = StyleSheet.create({
     right: 0,
     marginBottom: 4,
     borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.10)',
+    overflow: 'hidden',
+  },
+  mentionDropdownInline: {
+    marginBottom: 4,
+    borderRadius: 12,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.10)',
     overflow: 'hidden',
@@ -1859,5 +1986,73 @@ const s = StyleSheet.create({
     marginTop: 14,
     alignItems: 'center',
     borderRadius: 14,
+  },
+
+  // Weekly Goal Post
+  weeklyPostCard: {
+    marginHorizontal: 14, marginBottom: 8, borderRadius: 16,
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.15)',
+    overflow: 'hidden', padding: 16,
+  },
+  weeklyPostHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  weeklyPostDistance: {
+    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 28,
+  },
+  weeklyPostUnit: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.5)', fontSize: 16,
+  },
+  weeklyPostLabel: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2,
+  },
+  weeklyPostBarBg: {
+    height: 8, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.06)',
+    marginTop: 14, overflow: 'hidden',
+  },
+  weeklyPostBarFill: {
+    height: 8, borderRadius: 4,
+  },
+  weeklyPostFooter: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8,
+  },
+  weeklyPostPct: {
+    fontFamily: FONTS.montserrat.bold, color: '#FF6C24', fontSize: 14,
+  },
+  weeklyPostGoal: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.3)', fontSize: 12,
+  },
+
+  // Journey Milestone Post
+  journeyPostCard: {
+    marginHorizontal: 14, marginBottom: 8, borderRadius: 16,
+    borderWidth: 0.5, borderColor: 'rgba(255,172,125,0.15)',
+    overflow: 'hidden', padding: 16,
+  },
+  journeyPostHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+  },
+  journeyPostTitle: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.4)', fontSize: 12,
+  },
+  journeyPostKm: {
+    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 28, marginTop: 2,
+  },
+  journeyPostUnit: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.5)', fontSize: 16,
+  },
+  journeyPostStats: {
+    flexDirection: 'row', alignItems: 'center', marginTop: 14,
+    paddingTop: 12, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  journeyPostStat: { flex: 1, alignItems: 'center' },
+  journeyPostStatValue: {
+    fontFamily: FONTS.montserrat.bold, color: 'rgba(255,255,255,0.8)', fontSize: 15,
+  },
+  journeyPostStatLabel: {
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 3,
+  },
+  journeyPostDivider: {
+    width: 0.5, height: 28, backgroundColor: 'rgba(255,255,255,0.08)',
   },
 });

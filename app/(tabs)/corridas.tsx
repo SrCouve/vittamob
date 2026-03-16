@@ -508,7 +508,7 @@ function StoryCard({ run, bgUri, showRoute }: { run: StravaRun; bgUri: string | 
       {/* Route map overlay — centered */}
       {showRoute && run.summary_polyline && (
         <View style={storyStyles.routeOverlay}>
-          <RoutePreview polyline={run.summary_polyline} width={240} height={200} />
+          <RoutePreview polyline={run.summary_polyline} width={240} height={200} showMap={false} />
         </View>
       )}
 

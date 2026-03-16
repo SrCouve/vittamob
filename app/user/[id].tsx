@@ -17,6 +17,7 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { GlassCard } from '../../src/components/GlassCard';
 import { FollowButton } from '../../src/components/FollowButton';
+import { VerifiedBadge } from '../../src/components/VerifiedBadge';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useSocialStore } from '../../src/stores/socialStore';
 import {
@@ -31,6 +32,8 @@ const { width: SW } = Dimensions.get('window');
 
 const FIRE_ANIM = require('../../assets/fire-emoji.json');
 const SCALE_ANIM = require('../../assets/kitchen-scale.json');
+const CALENDAR_ANIM = require('../../assets/calendar-weekly.json');
+const HIKER_ANIM = require('../../assets/hiker-journey.json');
 const HEIGHT_ANIM = require('../../assets/height.json');
 const RUNNING_ANIM = require('../../assets/running.json');
 const CELEBRATION_ANIM = require('../../assets/celebration.json');
@@ -349,8 +352,8 @@ export default function PublicProfileScreen() {
       if (result.stats) {
         const s = result.stats;
         setStravaStats({
-          weeklyKm: (s.weekly_km as number[]) || [0, 0, 0, 0, 0, 0, 0],
-          weeklyTotal: s.weekly_total_km || 0,
+          weeklyKm: [0, 0, 0, 0, 0, 0, 0],  // Don't use cache — recalculated from runs below
+          weeklyTotal: 0,
           weeklyGoal: s.weekly_goal_km || 20,
           lifetimeDistanceKm: (s.lifetime_distance_m || 0) / 1000,
           lifetimeRunCount: s.lifetime_run_count || 0,
@@ -374,6 +377,22 @@ export default function PublicProfileScreen() {
           workout_type: r.workout_type ?? null,
         }));
         setStravaRuns(runs);
+
+        // Recalculate weekly km from actual runs (cache may be stale after week reset)
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(now.getFullYear(), now.getMonth(), diff, 0, 0, 0, 0);
+        const dailyKm = [0, 0, 0, 0, 0, 0, 0];
+        for (const run of runs) {
+          const d = new Date(run.activity_date);
+          if (d >= monday) {
+            const dayIdx = (d.getDay() + 6) % 7;
+            dailyKm[dayIdx] += run.distance_km;
+          }
+        }
+        const realWeeklyTotal = dailyKm.reduce((a, b) => a + b, 0);
+        setStravaStats(prev => prev ? { ...prev, weeklyKm: dailyKm, weeklyTotal: realWeeklyTotal } : prev);
       }
 
       setIsLoadingStrava(false);
@@ -407,8 +426,8 @@ export default function PublicProfileScreen() {
 
     if (stats) {
       setStravaStats({
-        weeklyKm: (stats.weekly_km as number[]) || [0, 0, 0, 0, 0, 0, 0],
-        weeklyTotal: stats.weekly_total_km || 0,
+        weeklyKm: [0, 0, 0, 0, 0, 0, 0],  // Don't use cache — recalculated from runs below
+        weeklyTotal: 0,
         weeklyGoal: stats.weekly_goal_km || 20,
         lifetimeDistanceKm: (stats.lifetime_distance_m || 0) / 1000,
         lifetimeRunCount: stats.lifetime_run_count || 0,
@@ -441,6 +460,22 @@ export default function PublicProfileScreen() {
         summary_polyline: r.summary_polyline ?? null,
       }));
       setStravaRuns(runs);
+
+      // Recalculate weekly km from actual runs
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(now.getFullYear(), now.getMonth(), diff, 0, 0, 0, 0);
+      const dailyKm = [0, 0, 0, 0, 0, 0, 0];
+      for (const run of runs) {
+        const d = new Date(run.activity_date);
+        if (d >= monday) {
+          const dayIdx = (d.getDay() + 6) % 7;
+          dailyKm[dayIdx] += run.distance_km;
+        }
+      }
+      const realWeeklyTotal = dailyKm.reduce((a, b) => a + b, 0);
+      setStravaStats(prev => prev ? { ...prev, weeklyKm: dailyKm, weeklyTotal: realWeeklyTotal } : prev);
     }
   };
 
@@ -900,9 +935,12 @@ export default function PublicProfileScreen() {
           <BackIcon />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {isLoadingProfile ? '' : displayName}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1, justifyContent: 'center' }}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {isLoadingProfile ? '' : displayName}
+          </Text>
+          {profile?.is_verified && <VerifiedBadge size={16} />}
+        </View>
 
         <TouchableOpacity
           style={styles.headerBtn}
@@ -995,7 +1033,10 @@ export default function PublicProfileScreen() {
 
                   {/* Name & Bio */}
                   <View style={styles.nameSection}>
-                    <Text style={styles.userName}>{displayName}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Text style={styles.userName}>{displayName}</Text>
+                      {profile?.is_verified && <VerifiedBadge size={18} />}
+                    </View>
                     {profile.bio ? (
                       <Text style={styles.userBio} numberOfLines={3}>{profile.bio}</Text>
                     ) : null}
@@ -1267,7 +1308,7 @@ export default function PublicProfileScreen() {
                           <GlassCard style={styles.weeklyCard}>
                             <View style={styles.weeklyHeader}>
                               <View style={styles.weeklyTitleRow}>
-                                <RunIcon />
+                                <LottieView source={CALENDAR_ANIM} autoPlay loop={false} speed={0.6} style={{ width: 26, height: 26 }} />
                                 <Text style={styles.weeklyTitle}>Meta Semanal</Text>
                               </View>
                               <View style={styles.stravaBadge}>
@@ -1343,7 +1384,7 @@ export default function PublicProfileScreen() {
                         <Animated.View entering={FadeInDown.delay(200).duration(500)}>
                           <GlassCard style={styles.statsCard}>
                             <View style={styles.statsTitleRow}>
-                              <RunIcon />
+                              <LottieView source={HIKER_ANIM} autoPlay={true} loop={true} speed={0.8} style={{ width: 28, height: 28 }} renderMode="AUTOMATIC" />
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.statsTitle}>Jornada</Text>
                                 <Text style={styles.statsSubtitle}>historico lifetime</Text>

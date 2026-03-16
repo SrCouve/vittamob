@@ -5,6 +5,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { FollowButton } from './FollowButton';
+import { VerifiedBadge } from './VerifiedBadge';
 import type { UserListItem } from '../stores/socialStore';
 
 // ── Types ──
@@ -26,6 +27,7 @@ interface UserCardProps {
   onUnfollow?: () => void;
   isFollowLoading?: boolean;
   showFollowButton?: boolean;
+  isVerified?: boolean;
 }
 
 // ── Avatar Colors (same pattern as comunidade.tsx) ──
@@ -91,6 +93,7 @@ export function UserCard({
   onUnfollow,
   isFollowLoading = false,
   showFollowButton = true,
+  isVerified = false,
 }: UserCardProps) {
   return (
     <TouchableOpacity
@@ -105,6 +108,7 @@ export function UserCard({
       <View style={styles.info}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+          {isVerified && <VerifiedBadge size={14} />}
           {user.is_private && <LockIcon size={12} />}
         </View>
         {user.bio ? (

@@ -14,6 +14,7 @@ interface Profile {
   total_lessons: number;
   total_hours: number;
   subscription_tier: 'free' | 'plus' | 'pro';
+  is_verified: boolean;
   is_private: boolean;
   hide_routes: boolean;
   followers_count: number;

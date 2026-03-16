@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
-      "buildNumber": "76",
+      "buildNumber": "77",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {
