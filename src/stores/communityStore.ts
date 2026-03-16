@@ -344,7 +344,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
         imageUrl = urlData.publicUrl;
       }
 
-      const { error } = await supabase
+      const { data: insertedPost, error } = await supabase
         .from('community_posts')
         .insert({
           user_id: userId,
@@ -352,9 +352,38 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
           content: content ?? null,
           metadata,
           image_url: imageUrl,
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
+
+      // Send notifications for @mentions
+      const mentionData = metadata?.mentions as { userId: string; name: string }[] | undefined;
+      if (mentionData && mentionData.length > 0 && insertedPost?.id) {
+        // Get poster's name for notification body
+        const { data: posterProfile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', userId)
+          .single();
+        const posterName = posterProfile?.name ?? 'Alguem';
+
+        for (const mention of mentionData) {
+          // Don't notify yourself
+          if (mention.userId === userId) continue;
+          await supabase.from('notifications').insert({
+            user_id: mention.userId,
+            sender_id: userId,
+            type: 'mention',
+            title: 'Voce foi marcado!',
+            body: `${posterName} marcou voce em uma publicacao`,
+            data: { post_id: insertedPost.id, mentioner_id: userId, type: 'mention' },
+          }).then(({ error: notifErr }) => {
+            if (notifErr) console.warn('mention notification error:', notifErr);
+          });
+        }
+      }
 
       // Refresh feed
       await get().fetchPosts(true);

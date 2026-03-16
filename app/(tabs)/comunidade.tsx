@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Dimensions,
   Image,
   Alert,
+  FlatList,
 } from 'react-native';
 let ImagePicker: any = null;
 try { ImagePicker = require('expo-image-picker'); } catch {}
@@ -41,6 +42,7 @@ import { useScrollY } from '../../src/context/ScrollContext';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUserStore } from '../../src/stores/userStore';
 import { useCommunityStore, type CommunityPost, type PostType, type TopMember, type FeedFilter } from '../../src/stores/communityStore';
+import { supabase } from '../../src/lib/supabase';
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -363,6 +365,60 @@ function AchievementCard({ post }: { post: CommunityPost }) {
 
 // ─── Post Card ───────────────────────────────────────────────────
 
+// ─── Post Text with @Mentions ───────────────────────────────────
+
+function PostText({
+  text,
+  metadata,
+  onMentionPress,
+}: {
+  text: string;
+  metadata: Record<string, any>;
+  onMentionPress: (userId: string) => void;
+}) {
+  const mentionList = metadata?.mentions as { userId: string; name: string }[] | undefined;
+
+  if (!mentionList || mentionList.length === 0) {
+    return <Text style={s.postText}>{text}</Text>;
+  }
+
+  // Split text by @mentions and render them as tappable orange text
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  for (const mention of mentionList) {
+    const firstName = mention.name.split(' ')[0];
+    const mentionTag = `@${firstName}`;
+    const idx = remaining.indexOf(mentionTag);
+
+    if (idx >= 0) {
+      // Text before mention
+      if (idx > 0) {
+        parts.push(<Text key={key++}>{remaining.substring(0, idx)}</Text>);
+      }
+      // Mention (tappable, orange, bold)
+      parts.push(
+        <Text
+          key={key++}
+          style={{ color: '#FF6C24', fontFamily: FONTS.montserrat.bold }}
+          onPress={() => onMentionPress(mention.userId)}
+        >
+          {mentionTag}
+        </Text>
+      );
+      remaining = remaining.substring(idx + mentionTag.length);
+    }
+  }
+
+  // Remaining text
+  if (remaining) {
+    parts.push(<Text key={key++}>{remaining}</Text>);
+  }
+
+  return <Text style={s.postText}>{parts}</Text>;
+}
+
 function PostCard({
   post,
   userId,
@@ -519,7 +575,11 @@ function PostCard({
             {getPostText(post)}
           </Text>
         ) : (
-          <Text style={s.postText}>{post.content}</Text>
+          <PostText
+            text={post.content ?? ''}
+            metadata={post.metadata}
+            onMentionPress={onUserPress}
+          />
         )}
       </View>
 
@@ -748,6 +808,63 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
   const [imageUri, setImageUri] = useState<string | null>(null);
   const { createPost, isPosting } = useCommunityStore();
 
+  // Mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionResults, setMentionResults] = useState<{ id: string; name: string; avatar_url: string | null }[]>([]);
+  const [mentions, setMentions] = useState<{ userId: string; name: string }[]>([]);
+  const mentionCacheRef = useRef<{ id: string; name: string; avatar_url: string | null }[]>([]);
+
+  const fetchPartners = useCallback(async (query: string) => {
+    if (!userId) return;
+    // Use cached friends if available, otherwise fetch
+    if (mentionCacheRef.current.length === 0) {
+      const { data } = await supabase.rpc('get_friends', {
+        p_user_id: userId,
+        p_viewer_id: userId,
+      });
+      if (data && Array.isArray(data)) {
+        mentionCacheRef.current = data.map((u: any) => ({
+          id: u.id,
+          name: u.name ?? 'Usuario',
+          avatar_url: u.avatar_url ?? null,
+        }));
+      }
+    }
+    const filtered = query.length > 0
+      ? mentionCacheRef.current.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
+      : mentionCacheRef.current;
+    setMentionResults(filtered.slice(0, 4));
+  }, [userId]);
+
+  const handleTextChange = useCallback((newText: string) => {
+    setText(newText);
+
+    // Detect @ mention - look for the last @ that isn't completed
+    const lastAtIndex = newText.lastIndexOf('@');
+    if (lastAtIndex >= 0) {
+      const afterAt = newText.substring(lastAtIndex + 1);
+      // Mention is active if no space after @ and reasonable length
+      if (!afterAt.includes(' ') && afterAt.length <= 20) {
+        setMentionQuery(afterAt);
+        fetchPartners(afterAt);
+        return;
+      }
+    }
+    setMentionQuery(null);
+    setMentionResults([]);
+  }, [fetchPartners]);
+
+  const selectMention = useCallback((user: { id: string; name: string; avatar_url: string | null }) => {
+    const lastAtIndex = text.lastIndexOf('@');
+    if (lastAtIndex < 0) return;
+    const firstName = user.name.split(' ')[0];
+    const newText = text.substring(0, lastAtIndex) + `@${firstName} `;
+    setText(newText);
+    setMentions((prev) => [...prev, { userId: user.id, name: user.name }]);
+    setMentionQuery(null);
+    setMentionResults([]);
+  }, [text]);
+
   const handlePickImage = async () => {
     if (!ImagePicker) return;
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -765,10 +882,20 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
   const handlePost = async () => {
     if ((!text.trim() && !imageUri) || !userId) return;
     const msg = text.trim();
+    const mentionData = mentions.length > 0
+      ? mentions.map((m) => ({ userId: m.userId, name: m.name }))
+      : undefined;
     setText('');
+    setMentions([]);
     const uri = imageUri;
     setImageUri(null);
-    await createPost(userId, uri ? 'photo' : 'text', msg || undefined, {}, uri ?? undefined);
+    await createPost(
+      userId,
+      uri ? 'photo' : 'text',
+      msg || undefined,
+      mentionData ? { mentions: mentionData } : {},
+      uri ?? undefined,
+    );
   };
 
   if (!userId) return null;
@@ -776,7 +903,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
   const canPost = text.trim() || imageUri;
 
   return (
-    <View style={s.composeCard}>
+    <View style={[s.composeCard, { zIndex: 10 }]}>
       {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
       <LinearGradient
         colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
@@ -789,6 +916,26 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
         end={{ x: 1, y: 0 }}
         style={s.composeSpecular}
       />
+
+      {/* Mention dropdown */}
+      {mentionQuery !== null && mentionResults.length > 0 && (
+        <View style={s.mentionDropdown}>
+          {mentionResults.map((u, idx) => (
+            <TouchableOpacity
+              key={u.id}
+              style={[s.mentionItem, idx === mentionResults.length - 1 && { borderBottomWidth: 0 }]}
+              activeOpacity={0.7}
+              onPress={() => selectMention(u)}
+            >
+              <UserAvatar name={u.name} avatarUrl={u.avatar_url} size={28} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.mentionName}>{u.name}</Text>
+                <Text style={s.mentionHandle}>@{u.name.split(' ')[0].toLowerCase()}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {/* Image preview */}
       {imageUri && (
@@ -807,7 +954,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
         <UserAvatar name={userName} avatarUrl={userAvatar} size={34} />
         <TextInput
           value={text}
-          onChangeText={setText}
+          onChangeText={handleTextChange}
           placeholder={imageUri ? 'Adicione uma legenda...' : 'Compartilhe com a comunidade...'}
           placeholderTextColor="rgba(255,255,255,0.25)"
           style={s.composeInput}
@@ -1372,5 +1519,40 @@ const s = StyleSheet.create({
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center', alignItems: 'center',
+  },
+
+  // Mention dropdown
+  mentionDropdown: {
+    position: 'absolute',
+    bottom: '100%',
+    left: 0,
+    right: 0,
+    marginBottom: 4,
+    backgroundColor: 'rgba(30,30,30,0.95)',
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    overflow: 'hidden',
+    zIndex: 100,
+  },
+  mentionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    paddingHorizontal: 14,
+    gap: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  } as any,
+  mentionName: {
+    fontFamily: FONTS.montserrat.semibold,
+    color: '#fff',
+    fontSize: 14,
+  },
+  mentionHandle: {
+    fontFamily: FONTS.montserrat.regular,
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    marginTop: 1,
   },
 });

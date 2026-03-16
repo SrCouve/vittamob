@@ -96,6 +96,8 @@ export default function RootLayout() {
         router.push(`/user/${data.user_id}` as any);
       } else if (data?.type === 'friend' && data?.follower_id) {
         router.push(`/user/${data.follower_id}` as any);
+      } else if (data?.type === 'mention' && data?.post_id) {
+        router.push('/(tabs)/comunidade' as any);
       } else {
         router.push('/(tabs)/comunidade' as any);
       }

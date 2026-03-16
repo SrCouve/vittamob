@@ -420,7 +420,7 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
               autoPlay
               loop
               speed={0.8}
-              style={{ width: 40, height: 40 }}
+              style={{ width: 40, height: 40, marginTop: -10 }}
             />
           </View>
           <Text style={[styles.label, styles.parceirosLabel, { fontSize: cfg.fs }]}>Parceiros</Text>

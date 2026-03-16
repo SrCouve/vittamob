@@ -307,10 +307,8 @@ export default function PublicProfileScreen() {
       }
 
       return () => {
-        clearProfile();
-        setStravaConnected(false);
-        setStravaStats(null);
-        setStravaRuns([]);
+        // DON'T clearProfile here — it causes "not found" flash during navigation transitions
+        // Profile gets overwritten naturally when visiting a new profile
         if (sparkCleanupTimer.current) clearTimeout(sparkCleanupTimer.current);
         if (followDelayTimer.current) clearTimeout(followDelayTimer.current);
       };
@@ -925,26 +923,9 @@ export default function PublicProfileScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {(isLoadingProfile || !hasFetched) ? (
+        {(isLoadingProfile || !hasFetched || !profile) ? (
           <ProfileSkeleton />
-        ) : showNotFound ? (
-          <Animated.View entering={FadeInDown.duration(400)}>
-            <GlassCard variant="medium" style={styles.notFoundCard}>
-              <LockIcon />
-              <Text style={styles.notFoundTitle}>Perfil nao encontrado</Text>
-              <Text style={styles.notFoundSubtitle}>
-                Este usuario nao existe ou voce foi bloqueado.
-              </Text>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.notFoundBtn}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.notFoundBtnText}>Voltar</Text>
-              </TouchableOpacity>
-            </GlassCard>
-          </Animated.View>
-        ) : profile ? (
+        ) : (
           <>
             {/* ── Profile Card ── */}
             <Animated.View entering={FadeInDown.delay(50).duration(500)}>
@@ -1447,7 +1428,7 @@ export default function PublicProfileScreen() {
               </>
             )}
           </>
-        ) : null}
+        )}
       </ScrollView>
     </View>
   );

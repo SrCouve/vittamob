@@ -4,16 +4,25 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://ijveuheldszomunyohrr.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlqdmV1aGVsZHN6b211bnlvaHJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyNTQwMjAsImV4cCI6MjA4ODgzMDAyMH0.gsqkGqJ5JDdOGzU8fplzutCJKSNdAiDWSq31l6778cI';
 
-const memoryStore: Record<string, string> = {};
-const MemoryStorageAdapter = {
-  getItem: (key: string) => memoryStore[key] ?? null,
-  setItem: (key: string, value: string) => { memoryStore[key] = value; },
-  removeItem: (key: string) => { delete memoryStore[key]; },
-};
+// Try AsyncStorage for persistent sessions, fallback to memory
+let storageAdapter: any;
+
+try {
+  const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+  storageAdapter = AsyncStorage;
+} catch {
+  // Fallback: memory store (session lost on app restart)
+  const memoryStore: Record<string, string> = {};
+  storageAdapter = {
+    getItem: (key: string) => memoryStore[key] ?? null,
+    setItem: (key: string, value: string) => { memoryStore[key] = value; },
+    removeItem: (key: string) => { delete memoryStore[key]; },
+  };
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: MemoryStorageAdapter,
+    storage: storageAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
