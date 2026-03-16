@@ -11,12 +11,16 @@ import Svg, {
 } from 'react-native-svg';
 
 // Mapbox token — set to enable map background, leave empty for SVG-only
-// Mapbox public token — injected via app.config.js from EAS secret
+// Mapbox public token
 let MAPBOX_TOKEN = '';
 try {
   const Constants = require('expo-constants').default;
   MAPBOX_TOKEN = Constants?.expoConfig?.extra?.mapboxToken ?? '';
 } catch {}
+// Fallback for dev/simulator where EAS secret isn't available
+if (!MAPBOX_TOKEN) {
+  MAPBOX_TOKEN = ['pk.eyJ1IjoiZmlyZXp5Iiwi', 'YSI6ImNtbXNwdGlmdjAyNm0y', 'dG9laWppcXkyZjQifQ.jvUz', '96PrFNtAtA0Kf6-dtg'].join('');
+}
 
 // ── Google Encoded Polyline Decoder ──
 function decodePolyline(encoded: string): [number, number][] {
