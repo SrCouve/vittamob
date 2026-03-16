@@ -22,6 +22,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isInitialized: false,
 
   initialize: async () => {
+    if (get().isInitialized) return;
     try {
       // Listen for auth changes first
       supabase.auth.onAuthStateChange((_event, session) => {

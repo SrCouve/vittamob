@@ -634,7 +634,7 @@ function PostCard({
             <View style={s.challengeJoinMeta}>
               <UsersIcon size={11} />
               <Text style={s.challengeJoinCount}>
-                {post.metadata?.participant_count ?? Math.floor(Math.random() * 30) + 5} participantes
+                {post.metadata?.participant_count ?? 0} participantes
               </Text>
             </View>
           </View>
@@ -889,13 +889,18 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
     setMentions([]);
     const uri = imageUri;
     setImageUri(null);
-    await createPost(
+    const success = await createPost(
       userId,
       uri ? 'photo' : 'text',
       msg || undefined,
       mentionData ? { mentions: mentionData } : {},
       uri ?? undefined,
     );
+    if (!success) {
+      setText(msg);
+      setImageUri(uri);
+      Alert.alert('Erro', 'Nao foi possivel publicar. Tente novamente.');
+    }
   };
 
   if (!userId) return null;

@@ -59,7 +59,7 @@ interface CommunityState {
   setFeedFilter: (filter: FeedFilter) => void;
   fetchPosts: (refresh?: boolean) => Promise<void>;
   loadMorePosts: () => Promise<void>;
-  createPost: (userId: string, type: PostType, content?: string, metadata?: Record<string, any>, imageUri?: string) => Promise<void>;
+  createPost: (userId: string, type: PostType, content?: string, metadata?: Record<string, any>, imageUri?: string) => Promise<boolean>;
   deletePost: (postId: string, userId: string) => Promise<void>;
   toggleEnergia: (postId: string, userId: string) => Promise<void>;
   fetchComments: (postId: string, loadMore?: boolean) => Promise<void>;
@@ -140,6 +140,7 @@ async function loadMorePostsLegacy(
   get: () => CommunityState,
 ) {
   const state = get();
+  if (state.posts.length === 0) { set({ isLoadingMore: false }); return; }
   try {
     const lastPost = state.posts[state.posts.length - 1];
     const { data: { user } } = await supabase.auth.getUser();
@@ -387,8 +388,10 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
 
       // Refresh feed
       await get().fetchPosts(true);
+      return true;
     } catch (e) {
       console.error('createPost error:', e);
+      return false;
     } finally {
       set({ isPosting: false });
     }
@@ -572,7 +575,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
         .single();
 
       const newComment: PostComment = {
-        id: commentId ?? crypto.randomUUID(),
+        id: commentId ?? (Date.now().toString() + Math.random().toString(36).slice(2)),
         post_id: postId,
         user_id: userId,
         content,

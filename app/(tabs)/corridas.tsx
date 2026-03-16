@@ -982,7 +982,7 @@ export function CorridasContent({ userId, readOnly }: { userId: string | null; r
             activity_date: r.activity_date,
             distance_km: Number(r.distance_km),
             moving_time_seconds: r.moving_time_seconds ?? 0,
-            average_speed: Number(r.average_speed) ?? 0,
+            average_speed: Number(r.average_speed) || 0,
             sparks_awarded: r.sparks_awarded,
             workout_type: r.workout_type ?? null,
           }));
@@ -1072,7 +1072,7 @@ export function RecordsContent({ userId, readOnly }: { userId: string | null; re
             activity_date: r.activity_date,
             distance_km: Number(r.distance_km),
             moving_time_seconds: r.moving_time_seconds ?? 0,
-            average_speed: Number(r.average_speed) ?? 0,
+            average_speed: Number(r.average_speed) || 0,
             sparks_awarded: r.sparks_awarded,
             workout_type: r.workout_type ?? null,
           }));

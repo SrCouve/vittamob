@@ -271,7 +271,7 @@ export default function PerfilScreen() {
           >
             <EditIcon />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => Alert.alert('Em breve', 'Configuracoes em desenvolvimento.')}>
             <SettingsIcon />
           </TouchableOpacity>
         </View>
