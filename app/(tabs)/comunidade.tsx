@@ -367,6 +367,40 @@ function AchievementCard({ post }: { post: CommunityPost }) {
 
 // ─── Post Text with @Mentions ───────────────────────────────────
 
+function MentionChip({ mention, onPress }: { mention: { userId: string; name: string; avatar_url?: string }; onPress: () => void }) {
+  const firstName = mention.name.split(' ')[0];
+  const initial = firstName.charAt(0).toUpperCase();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={{
+        flexDirection: 'row', alignItems: 'center', gap: 4,
+        backgroundColor: 'rgba(255,108,36,0.10)',
+        paddingHorizontal: 6, paddingVertical: 2,
+        borderRadius: 10, borderWidth: 0.5,
+        borderColor: 'rgba(255,108,36,0.20)',
+        marginHorizontal: 2,
+      }}
+    >
+      <View style={{
+        width: 24, height: 24, borderRadius: 12, overflow: 'hidden',
+        backgroundColor: 'rgba(255,108,36,0.3)',
+        justifyContent: 'center', alignItems: 'center',
+      }}>
+        {mention.avatar_url ? (
+          <Image source={{ uri: mention.avatar_url }} style={{ width: 24, height: 24, borderRadius: 12 }} />
+        ) : (
+          <Text style={{ fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 11 }}>{initial}</Text>
+        )}
+      </View>
+      <Text style={{ fontFamily: FONTS.montserrat.bold, color: '#FF6C24', fontSize: 14 }}>
+        {firstName}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function PostText({
   text,
   metadata,
@@ -376,13 +410,13 @@ function PostText({
   metadata: Record<string, any>;
   onMentionPress: (userId: string) => void;
 }) {
-  const mentionList = metadata?.mentions as { userId: string; name: string }[] | undefined;
+  const mentionList = metadata?.mentions as { userId: string; name: string; avatar_url?: string }[] | undefined;
 
   if (!mentionList || mentionList.length === 0) {
     return <Text style={s.postText}>{text}</Text>;
   }
 
-  // Split text by @mentions and render them as tappable orange text
+  // Build parts: text segments + inline mention chips
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -393,30 +427,29 @@ function PostText({
     const idx = remaining.indexOf(mentionTag);
 
     if (idx >= 0) {
-      // Text before mention
       if (idx > 0) {
-        parts.push(<Text key={key++}>{remaining.substring(0, idx)}</Text>);
+        parts.push(<Text key={key++} style={s.postText}>{remaining.substring(0, idx)}</Text>);
       }
-      // Mention (tappable, orange, bold)
       parts.push(
-        <Text
+        <MentionChip
           key={key++}
-          style={{ color: '#FF6C24', fontFamily: FONTS.montserrat.bold }}
+          mention={mention}
           onPress={() => onMentionPress(mention.userId)}
-        >
-          {mentionTag}
-        </Text>
+        />
       );
       remaining = remaining.substring(idx + mentionTag.length);
     }
   }
 
-  // Remaining text
   if (remaining) {
-    parts.push(<Text key={key++}>{remaining}</Text>);
+    parts.push(<Text key={key++} style={s.postText}>{remaining}</Text>);
   }
 
-  return <Text style={s.postText}>{parts}</Text>;
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+      {parts}
+    </View>
+  );
 }
 
 function PostCard({
@@ -698,6 +731,52 @@ function CommentsSection({
   const cache = comments[postId];
   const postComments = cache?.items ?? [];
 
+  // Mention state for comments
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionResults, setMentionResults] = useState<{ id: string; name: string; avatar_url: string | null }[]>([]);
+  const [mentions, setMentions] = useState<{ userId: string; name: string; avatar_url?: string | null }[]>([]);
+  const mentionCacheRef = useRef<{ id: string; name: string; avatar_url: string | null }[]>([]);
+
+  const fetchPartners = useCallback(async (query: string) => {
+    if (!userId) return;
+    if (mentionCacheRef.current.length === 0) {
+      const { data } = await supabase.rpc('get_friends', { p_user_id: userId, p_viewer_id: userId });
+      if (data && Array.isArray(data)) {
+        mentionCacheRef.current = data.map((u: any) => ({ id: u.id, name: u.name ?? 'Usuario', avatar_url: u.avatar_url ?? null }));
+      }
+    }
+    const filtered = query.length > 0
+      ? mentionCacheRef.current.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
+      : mentionCacheRef.current;
+    setMentionResults(filtered.slice(0, 4));
+  }, [userId]);
+
+  const handleTextChange = useCallback((newText: string) => {
+    setText(newText);
+    const lastAtIndex = newText.lastIndexOf('@');
+    if (lastAtIndex >= 0) {
+      const afterAt = newText.substring(lastAtIndex + 1);
+      if (!afterAt.includes(' ') && afterAt.length <= 20) {
+        setMentionQuery(afterAt);
+        fetchPartners(afterAt);
+        return;
+      }
+    }
+    setMentionQuery(null);
+    setMentionResults([]);
+  }, [fetchPartners]);
+
+  const selectMention = useCallback((user: { id: string; name: string; avatar_url: string | null }) => {
+    const lastAtIndex = text.lastIndexOf('@');
+    if (lastAtIndex < 0) return;
+    const firstName = user.name.split(' ')[0];
+    const newText = text.substring(0, lastAtIndex) + `@${firstName} `;
+    setText(newText);
+    setMentions((prev) => prev.some(m => m.userId === user.id) ? prev : [...prev, { userId: user.id, name: user.name, avatar_url: user.avatar_url }]);
+    setMentionQuery(null);
+    setMentionResults([]);
+  }, [text]);
+
   useEffect(() => {
     fetchComments(postId);
   }, [postId]);
@@ -706,6 +785,8 @@ function CommentsSection({
     if (!text.trim() || !userId) return;
     const msg = text.trim();
     setText('');
+    setMentions([]);
+    // TODO: store mentions in comment metadata when backend supports it
     await addComment(postId, userId, msg);
   };
 
@@ -778,23 +859,49 @@ function CommentsSection({
 
       {/* Input */}
       {userId && (
-        <View style={s.commentInputRow}>
-          <TextInput
-            value={text}
-            onChangeText={setText}
-            placeholder="Escreva um comentário..."
-            placeholderTextColor="rgba(255,255,255,0.25)"
-            style={s.commentInput}
-            multiline
-            maxLength={500}
-          />
-          <TouchableOpacity
-            onPress={handleSend}
-            disabled={!text.trim()}
-            style={[s.sendBtn, !text.trim() && { opacity: 0.3 }]}
-          >
-            <SendIcon size={16} />
-          </TouchableOpacity>
+        <View style={{ zIndex: 10 }}>
+          {/* Mention dropdown for comments */}
+          {mentionQuery !== null && mentionResults.length > 0 && (
+            <View style={[s.mentionDropdown, { marginBottom: 4 }]}>
+              {!isWeb && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
+              <LinearGradient
+                colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
+                style={StyleSheet.absoluteFill}
+              />
+              {mentionResults.map((u, idx) => (
+                <TouchableOpacity
+                  key={u.id}
+                  style={[s.mentionItem, idx === mentionResults.length - 1 && { borderBottomWidth: 0 }]}
+                  activeOpacity={0.7}
+                  onPress={() => selectMention(u)}
+                >
+                  <UserAvatar name={u.name} avatarUrl={u.avatar_url} size={28} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.mentionName}>{u.name}</Text>
+                    <Text style={s.mentionHandle}>@{u.name.split(' ')[0].toLowerCase()}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <View style={s.commentInputRow}>
+            <TextInput
+              value={text}
+              onChangeText={handleTextChange}
+              placeholder="Escreva um comentário..."
+              placeholderTextColor="rgba(255,255,255,0.25)"
+              style={s.commentInput}
+              multiline
+              maxLength={500}
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!text.trim()}
+              style={[s.sendBtn, !text.trim() && { opacity: 0.3 }]}
+            >
+              <SendIcon size={16} />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </Animated.View>
@@ -811,7 +918,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
   // Mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionResults, setMentionResults] = useState<{ id: string; name: string; avatar_url: string | null }[]>([]);
-  const [mentions, setMentions] = useState<{ userId: string; name: string }[]>([]);
+  const [mentions, setMentions] = useState<{ userId: string; name: string; avatar_url?: string | null }[]>([]);
   const mentionCacheRef = useRef<{ id: string; name: string; avatar_url: string | null }[]>([]);
 
   const fetchPartners = useCallback(async (query: string) => {
@@ -860,7 +967,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
     const firstName = user.name.split(' ')[0];
     const newText = text.substring(0, lastAtIndex) + `@${firstName} `;
     setText(newText);
-    setMentions((prev) => prev.some(m => m.userId === user.id) ? prev : [...prev, { userId: user.id, name: user.name }]);
+    setMentions((prev) => prev.some(m => m.userId === user.id) ? prev : [...prev, { userId: user.id, name: user.name, avatar_url: user.avatar_url }]);
     setMentionQuery(null);
     setMentionResults([]);
   }, [text]);
@@ -883,7 +990,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
     if ((!text.trim() && !imageUri) || !userId) return;
     const msg = text.trim();
     const mentionData = mentions.length > 0
-      ? mentions.map((m) => ({ userId: m.userId, name: m.name }))
+      ? mentions.map((m) => ({ userId: m.userId, name: m.name, avatar_url: m.avatar_url ?? null }))
       : undefined;
     setText('');
     setMentions([]);
@@ -912,6 +1019,11 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
       {/* Mention dropdown — OUTSIDE composeCard to avoid overflow:hidden clipping */}
       {mentionQuery !== null && mentionResults.length > 0 && (
         <View style={s.mentionDropdown}>
+          {!isWeb && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
+            style={StyleSheet.absoluteFill}
+          />
           {mentionResults.map((u, idx) => (
             <TouchableOpacity
               key={u.id}
@@ -1531,10 +1643,9 @@ const s = StyleSheet.create({
   // Mention dropdown
   mentionDropdown: {
     marginBottom: 6,
-    backgroundColor: 'rgba(30,30,30,0.95)',
     borderRadius: 16,
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.10)',
     overflow: 'hidden',
   },
   mentionItem: {
