@@ -573,6 +573,8 @@ export const useSocialStore = create<SocialState>((set, get) => ({
 
       // Clear viewingProfile since user is now blocked
       set({ viewingProfile: null });
+      // Refresh counts (block removes mutual follows)
+      get().fetchMyCounts(blockerId);
     } catch (e) {
       console.error('blockUser error:', e);
     }
@@ -588,6 +590,8 @@ export const useSocialStore = create<SocialState>((set, get) => ({
       if (error) {
         console.error('unblockUser error:', error);
       }
+      // Refresh counts
+      get().fetchMyCounts(blockerId);
     } catch (e) {
       console.error('unblockUser error:', e);
     }

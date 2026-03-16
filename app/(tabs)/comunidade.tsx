@@ -860,7 +860,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
     const firstName = user.name.split(' ')[0];
     const newText = text.substring(0, lastAtIndex) + `@${firstName} `;
     setText(newText);
-    setMentions((prev) => [...prev, { userId: user.id, name: user.name }]);
+    setMentions((prev) => prev.some(m => m.userId === user.id) ? prev : [...prev, { userId: user.id, name: user.name }]);
     setMentionQuery(null);
     setMentionResults([]);
   }, [text]);
@@ -908,21 +908,8 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
   const canPost = text.trim() || imageUri;
 
   return (
-    <View style={[s.composeCard, { zIndex: 10 }]}>
-      {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
-      <LinearGradient
-        colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Specular */}
-      <LinearGradient
-        colors={['transparent', 'rgba(255,255,255,0.06)', 'transparent']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={s.composeSpecular}
-      />
-
-      {/* Mention dropdown */}
+    <View style={{ zIndex: 10 }}>
+      {/* Mention dropdown — OUTSIDE composeCard to avoid overflow:hidden clipping */}
       {mentionQuery !== null && mentionResults.length > 0 && (
         <View style={s.mentionDropdown}>
           {mentionResults.map((u, idx) => (
@@ -941,6 +928,20 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
           ))}
         </View>
       )}
+
+      <View style={s.composeCard}>
+        {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
+          style={StyleSheet.absoluteFill}
+        />
+        {/* Specular */}
+        <LinearGradient
+          colors={['transparent', 'rgba(255,255,255,0.06)', 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={s.composeSpecular}
+        />
 
       {/* Image preview */}
       {imageUri && (
@@ -986,6 +987,7 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
           )}
         </TouchableOpacity>
       </View>
+    </View>
     </View>
   );
 }
@@ -1528,17 +1530,12 @@ const s = StyleSheet.create({
 
   // Mention dropdown
   mentionDropdown: {
-    position: 'absolute',
-    bottom: '100%',
-    left: 0,
-    right: 0,
-    marginBottom: 4,
+    marginBottom: 6,
     backgroundColor: 'rgba(30,30,30,0.95)',
     borderRadius: 16,
     borderWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
-    zIndex: 100,
   },
   mentionItem: {
     flexDirection: 'row',
