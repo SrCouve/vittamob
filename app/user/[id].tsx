@@ -294,7 +294,8 @@ export default function PublicProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       if (id && myUserId && id !== myUserId) {
-        fetchPublicProfile(myUserId, id);
+        setHasFetched(false);
+        fetchPublicProfile(myUserId, id).then(() => setHasFetched(true));
         fetchMutualFollows(myUserId, id);
         checkMuted(myUserId, id);
       }
@@ -868,7 +869,9 @@ export default function PublicProfileScreen() {
   }, [myUserId, id, triggerTransferAnimation]);
 
   // ── Not found state ──
-  const showNotFound = !isLoadingProfile && !profile && id !== myUserId;
+  // Only show "not found" after we've actually tried to load (not on initial render)
+  const [hasFetched, setHasFetched] = useState(false);
+  const showNotFound = hasFetched && !isLoadingProfile && !profile && id !== myUserId;
 
   return (
     <View style={styles.root}>
@@ -911,7 +914,7 @@ export default function PublicProfileScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {isLoadingProfile ? (
+        {(isLoadingProfile || !hasFetched) ? (
           <ProfileSkeleton />
         ) : showNotFound ? (
           <Animated.View entering={FadeInDown.duration(400)}>

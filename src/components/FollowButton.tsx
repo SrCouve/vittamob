@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Alert, ActivityIndicator, Platform,
-  Dimensions,
+  Dimensions, Pressable,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming,
@@ -455,14 +455,13 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
       {/* White flash */}
       <Animated.View style={[styles.flashOverlay, flashStyle]} pointerEvents="none" />
 
-      <Animated.View
-        style={scaleStyle}
-        onTouchStart={isOrange ? startCharging : undefined}
-        onTouchEnd={isOrange ? cancelCharging : undefined}
-        onTouchCancel={isOrange ? cancelCharging : undefined}
-      >
+      <Animated.View style={scaleStyle}>
         {isOrange ? (
-          <View style={btnStyle}>
+          <Pressable
+            onPressIn={startCharging}
+            onPressOut={cancelCharging}
+            style={btnStyle}
+          >
             <LinearGradient
               colors={['#FF6C24', '#FF8540']}
               start={{ x: 0, y: 0 }}
@@ -470,11 +469,11 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
               style={[StyleSheet.absoluteFill, { borderRadius: 9999 }]}
             />
             {isCharging ? renderChargingContent() : isCompleted ? null : renderIdleContent()}
-          </View>
+          </Pressable>
         ) : (
-          <View style={btnStyle} onTouchEnd={handleTap}>
+          <Pressable onPress={handleTap} style={btnStyle}>
             {renderOtherContent()}
-          </View>
+          </Pressable>
         )}
       </Animated.View>
     </View>
