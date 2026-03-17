@@ -631,17 +631,6 @@ function PostCard({
               <Text style={s.postUserName}>{post.user_name}</Text>
               {isVerified && <VerifiedBadge size={14} />}
             </TouchableOpacity>
-            {isAutoPost && (
-              <View style={[s.postTypeBadge, isBigAchievement && s.postTypeBadgeBig]}>
-                {post.type === 'lesson_complete' && <CheckCircleIcon size={11} color="#FF8540" />}
-                {post.type === 'module_complete' && <TrophyIcon size={11} color="#FF6C24" />}
-                {post.type === 'streak' && <FireIcon size={11} color="#FFAC7D" />}
-                {post.type === 'challenge_join' && <TrophyIcon size={11} color="#FF6C24" />}
-                {post.type === 'run_complete' && <RunIcon size={11} color="#FF8540" />}
-                {post.type === 'weekly_goal' && <SparkIcon size={11} color="#FF6C24" />}
-                {post.type === 'journey_milestone' && <RunIcon size={11} color="#FFAC7D" />}
-              </View>
-            )}
           </View>
           <Text style={s.postTime}>{timeAgo(post.created_at)}</Text>
         </View>
@@ -1007,7 +996,7 @@ function CommentsSection({
       </View>
 
       {/* Comments list */}
-      <ScrollView style={s.commentsList} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+      <ScrollView style={s.commentsList} showsVerticalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
         {/* Load more (older comments) */}
         {cache?.hasMore && postComments.length > 0 && (
           <TouchableOpacity
