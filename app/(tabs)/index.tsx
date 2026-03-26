@@ -1,14 +1,15 @@
-import React, { useEffect, useCallback, useMemo } from 'react';
+import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Image, Dimensions, Platform,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking,
+  Dimensions, Platform, RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
-  FadeInDown, useAnimatedScrollHandler,
+  FadeIn, FadeInDown, useAnimatedScrollHandler,
   useSharedValue, useAnimatedStyle, withRepeat, withTiming, Easing,
 } from 'react-native-reanimated';
 import LottieView from 'lottie-react-native';
@@ -17,11 +18,15 @@ import Svg, { Path, Circle as SvgCircle, Defs, LinearGradient as SvgGradient, St
 import { Logo } from '../../src/components/Logo';
 import { GlassCard } from '../../src/components/GlassCard';
 import { VerifiedBadge } from '../../src/components/VerifiedBadge';
+import { RankOneBadge, RankTwoBadge, RankThreeBadge } from '../../src/components/RankOneBadge';
+import { ElectricBorder } from '../../src/components/ElectricBorder';
 import { RoutePreview } from '../../src/components/RoutePreview';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useCoachStore } from '../../src/stores/coachStore';
 import { useUserStore } from '../../src/stores/userStore';
+import { supabase } from '../../src/lib/supabase';
 import { useStravaStore } from '../../src/stores/stravaStore';
 import { useSocialStore } from '../../src/stores/socialStore';
 import { useCommunityStore, type TopMember } from '../../src/stores/communityStore';
@@ -49,6 +54,7 @@ const RUNNING_ANIM = require('../../assets/running.json');
 const CALENDAR_ANIM = require('../../assets/calendar-weekly.json');
 const MEDAL_ANIM = require('../../assets/medal.json');
 const HIKER_ANIM = require('../../assets/hiker-journey.json');
+const TROPHY_ANIM = require('../../assets/trophi.json');
 const CELEBRATION_ANIM = require('../../assets/celebration.json');
 const RUN100_ANIM = require('../../assets/run100.json');
 const MOON_ANIM = require('../../assets/moon-night.json');
@@ -118,6 +124,55 @@ function ShareIcon({ size = 16, color = 'rgba(255,255,255,0.5)' }: { size?: numb
 // ══ HOME SCREEN ══
 // ══════════════════════════════════════════════════
 
+function SkeletonBlock({ w, h, r = 8, style }: { w: number | string; h: number; r?: number; style?: any }) {
+  const opacity = useSharedValue(0.4);
+  useEffect(() => {
+    opacity.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true);
+  }, []);
+  const anim = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View style={[{ width: w as any, height: h, borderRadius: r, backgroundColor: 'rgba(255,255,255,0.06)' }, anim, style]} />
+  );
+}
+
+function EventSkeleton() {
+  return (
+    <View style={[styles.eventoParceiro, { backgroundColor: 'rgba(255,255,255,0.02)', overflow: 'hidden' }]}>
+      {/* Image area */}
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <SkeletonBlock w="100%" h={280} r={0} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.02)' }} />
+      </View>
+      {/* Content overlay at bottom */}
+      <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 20, gap: 12 }}>
+        {/* Logo + Title */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <SkeletonBlock w={36} h={36} r={12} />
+          <View style={{ gap: 6, flex: 1 }}>
+            <SkeletonBlock w="35%" h={8} r={4} />
+            <SkeletonBlock w="65%" h={12} r={6} />
+          </View>
+          <SkeletonBlock w={34} h={40} r={10} />
+        </View>
+        {/* Details row */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <SkeletonBlock w={36} h={8} r={4} />
+          <SkeletonBlock w={28} h={8} r={4} />
+          <SkeletonBlock w={52} h={8} r={4} />
+        </View>
+        {/* Bottom row */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row' }}>
+            {[0, 1, 2].map(i => (
+              <SkeletonBlock key={i} w={22} h={22} r={11} style={{ marginLeft: i > 0 ? -8 : 0, borderWidth: 2, borderColor: 'rgba(13,13,13,0.8)' }} />
+            ))}
+          </View>
+          <SkeletonBlock w={76} h={28} r={14} style={{ backgroundColor: 'rgba(255,108,36,0.08)' }} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const scrollY = useScrollY();
@@ -125,6 +180,7 @@ export default function HomeScreen() {
   // ── Stores ──
   const user = useAuthStore((s) => s.user);
   const { profile } = useUserStore();
+  const { hasCoach, fetchCoachProfile } = useCoachStore();
   const {
     isConnected: stravaConnected,
     weeklyTotal, weeklyGoal, weeklyKm,
@@ -146,23 +202,50 @@ export default function HomeScreen() {
   const firstName = profile?.name?.split(' ')[0] ?? 'Corredor';
   const userId = user?.id;
 
-  // ── Data fetching ──
-  useEffect(() => {
-    if (!userId) return;
-    fetchTopMembers();
-    fetchMyCounts(userId);
-    fetchFriends(userId, userId);
-    fetchRuns(userId);
+  // Events from database
+  const [events, setEvents] = useState<any[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [myRank, setMyRank] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // ── Data fetching with staleness check ──
+  const lastFetchRef = useRef(0);
+
+  const loadHomeData = useCallback((force = false): Promise<void> => {
+    if (!userId) return Promise.resolve();
+    const now = Date.now();
+    const stale = force || (now - lastFetchRef.current > 60000); // 60s staleness
+    if (!stale) return Promise.resolve();
+    lastFetchRef.current = now;
+
+    return Promise.all([
+      fetchTopMembers(),
+      fetchMyCounts(userId),
+      fetchFriends(userId, userId),
+      fetchRuns(userId),
+      fetchCoachProfile(userId),
+      supabase.rpc('get_user_rank', { p_user_id: userId }).then(({ data }) => {
+        if (typeof data === 'number') setMyRank(data);
+      }),
+      supabase.rpc('get_home_events').then(({ data }) => {
+        if (data) {
+          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          setEvents(Array.isArray(parsed) ? parsed : []);
+        }
+        setEventsLoading(false);
+      }),
+    ]).then(() => {});
   }, [userId]);
 
-  // Refresh on focus
-  useFocusEffect(
-    useCallback(() => {
-      if (!userId) return;
-      fetchTopMembers();
-      fetchMyCounts(userId);
-    }, [userId])
-  );
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadHomeData(true);
+    setRefreshing(false);
+  }, [loadHomeData]);
+
+  // First load + refresh on focus (with staleness)
+  useEffect(() => { loadHomeData(true); }, [userId]);
+  useFocusEffect(useCallback(() => { loadHomeData(); }, [loadHomeData]));
 
   // ── Derived data ──
   const weeklyProgress = weeklyGoal > 0 ? Math.min((weeklyTotal / weeklyGoal) * 100, 100) : 0;
@@ -212,6 +295,15 @@ export default function HomeScreen() {
       showsVerticalScrollIndicator={false}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#FF6C24"
+          colors={['#FF6C24']}
+          progressBackgroundColor="#1A1A1A"
+        />
+      }
     >
       {/* ══════════════════════════════════════
            1. HEADER
@@ -299,6 +391,20 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.heroStatLabel}>streak</Text>
             </View>
+
+            {/* Divider */}
+            <View style={styles.heroDivider} />
+
+            {/* Rank */}
+            <View style={styles.heroStatCol}>
+              <View style={styles.heroStatIconRow}>
+                <LottieView source={TROPHY_ANIM} autoPlay loop={false} speed={0.8} style={styles.heroLottie} />
+                <Text style={[styles.heroStatValue, myRank > 0 && myRank <= 3 && { color: '#FF6C24' }]}>
+                  {myRank > 0 ? `#${myRank}` : '--'}
+                </Text>
+              </View>
+              <Text style={styles.heroStatLabel}>rank</Text>
+            </View>
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -320,128 +426,116 @@ export default function HomeScreen() {
           snapToAlignment="start"
           contentContainerStyle={{ paddingRight: 20, gap: 14 }}
         >
-          {/* Event: Kurv Klub */}
-          <TouchableOpacity activeOpacity={0.9} style={styles.eventoParceiro}>
-            {/* Background image */}
-            <Image
-              source={require('../../assets/kurv-event-bg.png')}
-              style={[StyleSheet.absoluteFill, { transform: [{ scale: 0.75 }, { translateX: -160 }, { translateY: -100 }] }]}
-              resizeMode="cover"
-            />
-            {/* Dark gradient overlay */}
-            <LinearGradient
-              colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.75)', 'rgba(0,0,0,0.95)']}
-              locations={[0, 0.3, 0.6, 0.85]}
-              style={StyleSheet.absoluteFill}
-            />
+          {events.map((evt) => {
+            const hasDate = !!evt.event_date;
+            const evtDate = hasDate ? new Date(evt.event_date + 'T12:00') : null;
+            const day = evtDate ? evtDate.getDate().toString() : '';
+            const month = evtDate ? evtDate.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.', '') : 'EM BREVE';
+            const time = evt.start_time ? evt.start_time.slice(0, 5).replace(':', 'h') : (hasDate ? '--' : '');
+            return (
+              <TouchableOpacity
+                key={evt.id}
+                activeOpacity={0.9}
+                style={styles.eventoParceiro}
+                onPress={() => router.push(`/event/${evt.id}` as any)}
+              >
+                {/* Background image */}
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 20, overflow: 'hidden' }]}>
+                  {evt.image_url ? (
+                    <Image source={{ uri: evt.image_url }} style={{ width: '100%', height: '100%' }} contentFit="cover" />
+                  ) : (
+                    <LinearGradient colors={['#1A1008', '#0D0D0D']} style={{ width: '100%', height: '100%' }} />
+                  )}
+                </View>
+                <LinearGradient
+                  colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.92)']}
+                  locations={[0, 0.2, 0.5, 0.8]}
+                  style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
+                />
 
-            {/* Content */}
-            <View style={styles.epContent}>
-              {/* Logo + info */}
-              <View style={styles.epTopRow}>
-                <Image source={require('../../assets/kukur-logo.png')} style={styles.epLogo} resizeMode="contain" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.epOrg}>KURVA KLUB</Text>
-                  <Text style={styles.epTitle}>Corrida Noturna Fortaleza</Text>
-                </View>
-                <View style={styles.epDateBadge}>
-                  <Text style={styles.epDateDay}>22</Text>
-                  <Text style={styles.epDateMonth}>MAR</Text>
-                </View>
-              </View>
+                <View style={styles.epContent}>
+                  <View style={styles.epTopRow}>
+                    {evt.organizer_logo_url && evt.organizer_logo_url !== 'kukur-logo' ? (
+                      <Image source={{ uri: evt.organizer_logo_url }} style={styles.epLogo} contentFit="contain" />
+                    ) : (
+                      <View style={[styles.epLogo, { backgroundColor: 'rgba(255,108,36,0.15)', justifyContent: 'center', alignItems: 'center' }]}>
+                        <Text style={{ color: '#FF6C24', fontFamily: FONTS.montserrat.bold, fontSize: 14 }}>{(evt.organizer_name || '?')[0]}</Text>
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.epOrg}>{evt.organizer_name?.toUpperCase()}</Text>
+                      <Text style={styles.epTitle}>{evt.title}</Text>
+                    </View>
+                    <View style={styles.epDateBadge}>
+                      {day ? <Text style={styles.epDateDay}>{day}</Text> : null}
+                      <Text style={styles.epDateMonth}>{month}</Text>
+                    </View>
+                  </View>
 
-              {/* Details */}
-              <View style={styles.epDetailsRow}>
-                <View style={styles.epDetail}>
-                  <Text style={styles.epDetailValue}>5km</Text>
-                  <Text style={styles.epDetailLabel}>trajeto</Text>
-                </View>
-                <View style={styles.epDetailDivider} />
-                <View style={styles.epDetail}>
-                  <Text style={styles.epDetailValue}>20h</Text>
-                  <Text style={styles.epDetailLabel}>largada</Text>
-                </View>
-                <View style={styles.epDetailDivider} />
-                <View style={styles.epDetail}>
-                  <Text style={styles.epDetailValue}>Beira-Mar</Text>
-                  <Text style={styles.epDetailLabel}>local</Text>
-                </View>
-              </View>
+                  <View style={styles.epDetailsRow}>
+                    <View style={styles.epDetail}>
+                      <Text style={styles.epDetailValue}>{evt.distance_km > 0 ? `${evt.distance_km}km` : '--'}</Text>
+                      <Text style={styles.epDetailLabel}>distância</Text>
+                    </View>
+                    <View style={styles.epDetailDivider} />
+                    <View style={styles.epDetail}>
+                      <Text style={styles.epDetailValue}>{time || 'Em breve'}</Text>
+                      <Text style={styles.epDetailLabel}>horário</Text>
+                    </View>
+                    <View style={styles.epDetailDivider} />
+                    <View style={styles.epDetail}>
+                      <Text style={styles.epDetailValue} numberOfLines={1}>{(evt.location || 'A definir').split(',')[0]}</Text>
+                      <Text style={styles.epDetailLabel}>local</Text>
+                    </View>
+                  </View>
 
-              {/* Participants + CTA */}
-              <View style={styles.epBottomRow}>
-                <View style={styles.epParticipants}>
-                  <View style={[styles.epAvatar, { backgroundColor: '#FF6C24' }]} />
-                  <View style={[styles.epAvatar, { backgroundColor: '#FF8540', marginLeft: -10 }]} />
-                  <View style={[styles.epAvatar, { backgroundColor: '#FFAC7D', marginLeft: -10 }]} />
-                  <View style={[styles.epAvatar, { backgroundColor: 'rgba(255,255,255,0.15)', marginLeft: -10 }]} />
-                  <Text style={styles.epParticipantsText}>+23 parceiros</Text>
+                  <View style={styles.epBottomRow}>
+                    <View style={styles.epParticipants}>
+                      {(evt.participant_avatars ?? []).map((p: any, i: number) => (
+                        p.avatar_url ? (
+                          <Image key={i} source={{ uri: p.avatar_url }} style={[styles.epAvatar, { marginLeft: i > 0 ? -10 : 0 }]} />
+                        ) : (
+                          <View key={i} style={[styles.epAvatar, { backgroundColor: ['#FF6C24', '#FF8540', '#FFAC7D', 'rgba(255,255,255,0.15)'][i % 4], marginLeft: i > 0 ? -10 : 0, justifyContent: 'center', alignItems: 'center' }]}>
+                            <Text style={{ color: '#fff', fontSize: 10, fontFamily: FONTS.montserrat.bold }}>{(p.name || '?')[0]}</Text>
+                          </View>
+                        )
+                      ))}
+                      {evt.participant_count > (evt.participant_avatars?.length ?? 0) && (
+                        <Text style={styles.epParticipantsText}>+{evt.participant_count - (evt.participant_avatars?.length ?? 0)}</Text>
+                      )}
+                      {evt.participant_count > 0 && evt.participant_count <= (evt.participant_avatars?.length ?? 0) && (
+                        <Text style={styles.epParticipantsText}>{evt.participant_count} confirmado{evt.participant_count > 1 ? 's' : ''}</Text>
+                      )}
+                    </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      {evt.spark_cost > 0 && (
+                        <View style={styles.epSparkBadge}>
+                          <LottieView source={THUNDER_ANIM} autoPlay loop speed={1} style={{ width: 14, height: 14 }} />
+                          <Text style={styles.epSparkText}>{evt.spark_cost}</Text>
+                        </View>
+                      )}
+                      {evt.spark_multiplier > 1 && (
+                        <View style={styles.epMultBadge}>
+                          <Text style={styles.epMultText}>{evt.spark_multiplier}x</Text>
+                        </View>
+                      )}
+                      <View style={styles.epCtaBtn}>
+                        <LinearGradient
+                          colors={['#FF6C24', '#FF8540']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <Text style={styles.epCtaText}>Participar</Text>
+                      </View>
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.epCtaBtn}>
-                  <LinearGradient
-                    colors={['#FF6C24', '#FF8540']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <Text style={styles.epCtaText}>Participar</Text>
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
+              </TouchableOpacity>
+            );
+          })}
 
-          {/* Event 2: Sunrise Run */}
-          <TouchableOpacity activeOpacity={0.9} style={styles.eventoParceiro}>
-            <Image
-              source={require('../../assets/sunrise-event-bg.jpg')}
-              style={StyleSheet.absoluteFill}
-              resizeMode="cover"
-            />
-            <LinearGradient
-              colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.85)']}
-              locations={[0, 0.35, 0.8]}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.epContent}>
-              <View style={styles.epTopRow}>
-                <LottieView source={SUNSET_ANIM} autoPlay loop speed={0.6} style={{ width: 36, height: 36 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.epOrg}>VITTA UP</Text>
-                  <Text style={styles.epTitle}>Sunrise Run</Text>
-                </View>
-                <View style={styles.epDateBadge}>
-                  <Text style={styles.epDateDay}>29</Text>
-                  <Text style={styles.epDateMonth}>MAR</Text>
-                </View>
-              </View>
-              <View style={styles.epDetailsRow}>
-                <View style={styles.epDetail}>
-                  <Text style={styles.epDetailValue}>10km</Text>
-                  <Text style={styles.epDetailLabel}>trajeto</Text>
-                </View>
-                <View style={styles.epDetailDivider} />
-                <View style={styles.epDetail}>
-                  <Text style={styles.epDetailValue}>5h30</Text>
-                  <Text style={styles.epDetailLabel}>largada</Text>
-                </View>
-                <View style={styles.epDetailDivider} />
-                <View style={styles.epDetail}>
-                  <Text style={styles.epDetailValue}>Praia</Text>
-                  <Text style={styles.epDetailLabel}>local</Text>
-                </View>
-              </View>
-              <View style={styles.epBottomRow}>
-                <View style={styles.epParticipants}>
-                  <View style={[styles.epAvatar, { backgroundColor: '#FF8540' }]} />
-                  <View style={[styles.epAvatar, { backgroundColor: '#FFAC7D', marginLeft: -10 }]} />
-                  <Text style={styles.epParticipantsText}>+8 parceiros</Text>
-                </View>
-                <View style={[styles.epCtaBtn, { backgroundColor: 'rgba(255,255,255,0.08)' }]}>
-                  <Text style={[styles.epCtaText, { color: 'rgba(255,255,255,0.6)' }]}>Em breve</Text>
-                </View>
-              </View>
-            </View>
-          </TouchableOpacity>
+          {events.length === 0 && eventsLoading && <EventSkeleton />}
         </ScrollView>
       </Animated.View>
 
@@ -600,12 +694,15 @@ export default function HomeScreen() {
                   style={[styles.rankRow, i === 0 && styles.rankRowFirst]}
                 >
                   {i === 0 && (
-                    <LinearGradient
-                      colors={['rgba(255,108,36,0.15)', 'rgba(255,108,36,0.04)']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={StyleSheet.absoluteFill}
-                    />
+                    <>
+                      <LinearGradient
+                        colors={['rgba(255,108,36,0.12)', 'rgba(255,108,36,0.03)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                      <ElectricBorder borderRadius={10} width={SCREEN_W - 44} height={56} />
+                    </>
                   )}
                   {/* Rank number */}
                   <View style={[styles.rankBadge, i === 0 && styles.rankBadgeGold, i === 1 && styles.rankBadgeSilver, i === 2 && styles.rankBadgeBronze]}>
@@ -632,14 +729,25 @@ export default function HomeScreen() {
                   )}
 
                   {/* Name */}
-                  <Text style={styles.rankName} numberOfLines={1}>
-                    {member.user_name?.split(' ')[0] || 'Corredor'}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 }}>
+                    <Text style={styles.rankName} numberOfLines={1}>
+                      {member.user_name?.split(' ')[0] || 'Corredor'}
+                    </Text>
+                    {member.is_verified && <VerifiedBadge size={13} />}
+                    {topMembers.length > 0 && topMembers[0].user_id === member.user_id && <RankOneBadge />}
+                    {topMembers.length > 1 && topMembers[1].user_id === member.user_id && <RankTwoBadge />}
+                    {topMembers.length > 2 && topMembers[2].user_id === member.user_id && <RankThreeBadge />}
+                  </View>
 
-                  {/* Weekly km */}
-                  <Text style={[styles.rankKm, i === 0 && styles.rankKmGold]}>
-                    {member.weekly_km.toFixed(1)}km
-                  </Text>
+                  {/* Weekly km + sparks */}
+                  <View style={styles.rankStatsCol}>
+                    <Text style={[styles.rankKm, i === 0 && styles.rankKmGold]}>
+                      {member.weekly_km.toFixed(1)}km
+                    </Text>
+                    <Text style={styles.rankSparks}>
+                      {Math.floor(member.weekly_km)} sparks
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -698,6 +806,7 @@ export default function HomeScreen() {
                     {p.name?.split(' ')[0] || '...'}
                   </Text>
                   {p.is_verified && <VerifiedBadge size={10} />}
+                  {topMembers.length > 0 && topMembers[0].user_id === p.id && <RankOneBadge />}
                 </View>
               </TouchableOpacity>
             ))}
@@ -881,7 +990,7 @@ export default function HomeScreen() {
                   <View style={styles.lastRunStatDivider} />
                   <View style={styles.lastRunStat}>
                     <View style={styles.sparksRow}>
-                      <LottieView source={THUNDER_ANIM} autoPlay loop style={{ width: 16, height: 16 }} />
+                      <LottieView source={THUNDER_ANIM} autoPlay loop style={{ width: 22, height: 22 }} />
                       <Text style={styles.lastRunSparksValue}>+{lastRun.sparks_awarded}</Text>
                     </View>
                     <Text style={styles.lastRunStatLabel}>sparks</Text>
@@ -1052,6 +1161,56 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
 
+  // ── Watch Banner ──
+  watchBanner: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,108,36,0.12)',
+    marginBottom: 16,
+    shadowColor: '#FF6C24',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+  },
+  watchBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  watchIconWrap: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  watchIconRing: {
+    position: 'absolute',
+  },
+  watchTextCol: {
+    flex: 1,
+  },
+  watchTitle: {
+    fontFamily: FONTS.montserrat.bold,
+    fontSize: 12,
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  watchSub: {
+    fontFamily: FONTS.montserrat.regular,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 2,
+  },
+  watchArrow: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   // ── Weekly Goal ──
   // Weekly Hero Card (Meta Semanal)
   weeklyHero: {
@@ -1159,16 +1318,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8, borderTopWidth: 0.5, borderBottomWidth: 0.5,
     borderColor: 'rgba(255,255,255,0.06)',
   },
-  epDetail: { flex: 1, alignItems: 'center' },
+  epDetail: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  epDetailInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   epDetailValue: {
-    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 12,
+    fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 13,
   },
   epDetailLabel: {
-    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.3)',
-    fontSize: 9, marginTop: 1,
+    fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.35)',
+    fontSize: 10, marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.5,
+    textAlign: 'center', alignSelf: 'center',
   },
   epDetailDivider: {
-    width: 0.5, height: 24, backgroundColor: 'rgba(255,255,255,0.08)',
+    width: 0.5, height: 30, backgroundColor: 'rgba(255,255,255,0.08)',
   },
   epBottomRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -1191,6 +1352,23 @@ const styles = StyleSheet.create({
   },
   epCtaText: {
     fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 11,
+  },
+  epSparkBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: 'rgba(255,108,36,0.12)',
+    borderWidth: 1, borderColor: 'rgba(255,108,36,0.2)',
+    borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4,
+  },
+  epSparkText: {
+    fontFamily: FONTS.montserrat.bold, fontSize: 11, color: '#FF6C24',
+  },
+  epMultBadge: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4,
+  },
+  epMultText: {
+    fontFamily: FONTS.montserrat.bold, fontSize: 11, color: 'rgba(255,255,255,0.5)',
   },
 
   // ── Events ──
@@ -1320,7 +1498,6 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   rankName: {
-    flex: 1,
     fontFamily: FONTS.montserrat.semibold,
     color: '#fff',
     fontSize: 13,
@@ -1331,6 +1508,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   rankKmGold: { color: '#FFAC7D' },
+  rankStatsCol: { alignItems: 'flex-end' },
+  rankSparks: {
+    fontFamily: FONTS.montserrat.medium, color: 'rgba(255,108,36,0.5)', fontSize: 10, marginTop: 1,
+  },
 
   sectionTime: {
     fontFamily: FONTS.montserrat.regular,
@@ -1403,7 +1584,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 14,
   },
-  emptyLottie: { width: 48, height: 48 },
+  emptyLottie: { width: 64, height: 64 },
   emptyTextCol: { flex: 1 },
   emptyTitle: {
     fontFamily: FONTS.montserrat.semibold,

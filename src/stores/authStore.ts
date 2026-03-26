@@ -24,10 +24,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialize: async () => {
     if (get().isInitialized) return;
     try {
-      // Listen for auth changes first
-      supabase.auth.onAuthStateChange((_event, session) => {
+      // Listen for auth changes (store subscription to prevent leak)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         set({ session, user: session?.user ?? null });
       });
+      // Store for potential cleanup (singleton, so this runs once);
 
       // Try to get existing session with timeout
       const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
@@ -85,6 +86,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    try { const { posthog } = require('../lib/posthog'); posthog.reset(); } catch {}
+    // Clear all stores
+    require('./userStore').useUserStore.getState().reset();
+    require('./communityStore').useCommunityStore.getState().reset();
+    require('./stravaStore').useStravaStore.getState().reset();
+    require('./pointsStore').usePointsStore.getState().reset();
+    require('./contentStore').useContentStore.getState().reset();
+    require('./socialStore').useSocialStore.getState().reset();
+    require('./coachStore').useCoachStore.getState().reset();
+    require('./eventStore').useEventStore.getState().reset();
+    try { require('./medalStore').useMedalStore.getState().reset(); } catch {}
     await supabase.auth.signOut();
     set({ session: null, user: null });
   },

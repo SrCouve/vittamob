@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useThemeStore } from '../../src/stores/themeStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
@@ -37,6 +38,7 @@ function formatPace(avgSpeed: number): string {
 }
 
 export default function MedalhasScreen() {
+  const isDarkM = useThemeStore((s) => s.glassTheme) === 'dark';
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ targetUserId?: string }>();
   const { user } = useAuthStore();
@@ -137,7 +139,9 @@ export default function MedalhasScreen() {
                 onPress={() => setSelectedMedal(medal)}
                 style={s.medalCard}
               >
-                {!isWeb && <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />}
+                {isDarkM && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />}
+                {isDarkM && <LinearGradient colors={['rgba(255,108,36,0.10)', 'rgba(255,133,64,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+                {!isWeb && <BlurView intensity={isDarkM ? 45 : 25} tint="dark" style={StyleSheet.absoluteFill} />}
                 <LinearGradient
                   colors={['rgba(255,108,36,0.10)', 'rgba(255,108,36,0.03)']}
                   style={StyleSheet.absoluteFill}

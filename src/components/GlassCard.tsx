@@ -2,6 +2,7 @@ import React, { type ReactNode } from 'react';
 import { View, StyleSheet, Platform, type ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useThemeStore } from '../stores/themeStore';
 
 const isWeb = Platform.OS === 'web';
 
@@ -12,67 +13,62 @@ interface GlassCardProps {
   intensity?: number;
 }
 
-// Web reference variants (from Tailwind):
-// light:  bg-white/5  backdrop-blur-md(12px)  border-white/10
-// medium: bg-white/10 backdrop-blur-xl(24px)  border-white/15
-// heavy:  bg-white/18 backdrop-blur-2xl(40px) border-white/22
-// orange: bg-[#FF6C24]/8 backdrop-blur-xl(24px) border-[#FF6C24]/15
-
-const variantConfig = {
-  light: {
-    bgColors: ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.03)'] as const,
-    borderColor: 'rgba(255,255,255,0.10)',
-    blurPx: 12,
-    nativeIntensity: 25,
-  },
-  medium: {
-    bgColors: ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.06)'] as const,
-    borderColor: 'rgba(255,255,255,0.15)',
-    blurPx: 24,
-    nativeIntensity: 40,
-  },
-  heavy: {
-    bgColors: ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.12)'] as const,
-    borderColor: 'rgba(255,255,255,0.22)',
-    blurPx: 40,
-    nativeIntensity: 60,
-  },
-  orange: {
-    bgColors: ['rgba(255,108,36,0.08)', 'rgba(255,108,36,0.04)'] as const,
-    borderColor: 'rgba(255,108,36,0.15)',
-    blurPx: 24,
-    nativeIntensity: 40,
-  },
-};
-
 export function GlassCard({ children, style, variant = 'medium', intensity }: GlassCardProps) {
-  const config = variantConfig[variant];
-  const nativeIntensity = intensity ?? config.nativeIntensity;
+  const glassTheme = useThemeStore((s) => s.glassTheme);
+  const isOrange = variant === 'orange';
+  const isDark = glassTheme === 'dark';
 
   const webGlassStyle = isWeb ? {
-    backdropFilter: `blur(${config.blurPx}px)`,
-    WebkitBackdropFilter: `blur(${config.blurPx}px)`,
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
     boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
   } as any : {};
 
+  // Dark theme: same as meta semanal (dark base + orange gradient + blur 45 + warm specular)
+  // Light theme: original glass (white gradient + blur + subtle specular)
+
   return (
-    <View style={[styles.container, { borderColor: config.borderColor }, webGlassStyle, style]}>
-      {!isWeb && (
-        <BlurView intensity={nativeIntensity} tint="dark" style={StyleSheet.absoluteFill} />
+    <View style={[styles.container, {
+      borderColor: isDark
+        ? (isOrange ? 'rgba(255,108,36,0.15)' : 'rgba(255,140,100,0.2)')
+        : (isOrange ? 'rgba(255,108,36,0.15)' : 'rgba(255,255,255,0.15)'),
+      shadowColor: isDark ? '#FF6C24' : '#000',
+      shadowOpacity: isDark ? 0.08 : 0.15,
+    }, webGlassStyle, style]}>
+
+      {isDark && (
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />
       )}
+
       <LinearGradient
-        colors={config.bgColors}
+        colors={isDark
+          ? (isOrange
+            ? ['rgba(255,108,36,0.14)', 'rgba(255,133,64,0.06)', 'rgba(255,108,36,0.10)']
+            : ['rgba(255,108,36,0.10)', 'rgba(255,133,64,0.04)', 'rgba(255,172,125,0.06)'])
+          : (isOrange
+            ? ['rgba(255,108,36,0.08)', 'rgba(255,108,36,0.04)']
+            : ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.06)'])
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
-      {/* Top specular highlight */}
+
+      {!isWeb && (
+        <BlurView intensity={intensity ?? (isDark ? 45 : 40)} tint="dark" style={StyleSheet.absoluteFill} />
+      )}
+
+      {/* Specular highlight */}
       <LinearGradient
-        colors={['transparent', 'rgba(255,255,255,0.08)', 'transparent']}
+        colors={isDark
+          ? ['transparent', 'rgba(255,200,170,0.35)', 'transparent']
+          : ['transparent', 'rgba(255,255,255,0.08)', 'transparent']
+        }
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={styles.specular}
       />
+
       <View style={styles.content}>
         {children}
       </View>
@@ -85,12 +81,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 0.5,
     overflow: 'hidden',
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 24,
   },
   specular: {
     position: 'absolute',
     top: 0,
-    left: '10%',
-    right: '10%',
+    left: 0,
+    right: 0,
     height: 1,
     zIndex: 1,
   },

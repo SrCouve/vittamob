@@ -39,12 +39,18 @@ import { Logo } from '../../src/components/Logo';
 import { GlassCard } from '../../src/components/GlassCard';
 import { RoutePreview } from '../../src/components/RoutePreview';
 import { VerifiedBadge } from '../../src/components/VerifiedBadge';
+import { RankOneBadge, RankTwoBadge, RankThreeBadge } from '../../src/components/RankOneBadge';
+import { ElectricBorder } from '../../src/components/ElectricBorder';
 import { FONTS, COLORS } from '../../src/constants/theme';
 import { useScrollY } from '../../src/context/ScrollContext';
 import { useAuthStore } from '../../src/stores/authStore';
+import { useThemeStore } from '../../src/stores/themeStore';
 import { useUserStore } from '../../src/stores/userStore';
 import { useCommunityStore, type CommunityPost, type PostType, type TopMember, type FeedFilter } from '../../src/stores/communityStore';
 import { supabase } from '../../src/lib/supabase';
+
+let Haptics: any = null;
+try { Haptics = require('expo-haptics'); } catch {}
 
 const isWeb = Platform.OS === 'web';
 const { width: SW } = Dimensions.get('window');
@@ -277,9 +283,10 @@ function UserAvatar({ name, avatarUrl, size = 36, ring = false }: { name: string
 
   const renderInner = (extraStyle?: any) => {
     if (avatarUrl) {
+      const ExpoImage = require('expo-image').Image;
       return (
         <View style={[s.avatar, { width: size, height: size, borderRadius: size / 2 }, extraStyle]}>
-          <Image source={{ uri: avatarUrl }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+          <ExpoImage source={{ uri: avatarUrl }} cachePolicy="memory-disk" contentFit="cover" transition={150} style={{ width: size, height: size, borderRadius: size / 2 }} />
         </View>
       );
     }
@@ -318,6 +325,7 @@ function UserAvatar({ name, avatarUrl, size = 36, ring = false }: { name: string
 // For now uses data from the community posts (most energia)
 
 function TopMembersSection({ members, onMemberPress, verifiedIds }: { members: TopMember[]; onMemberPress: (userId: string) => void; verifiedIds: Set<string> }) {
+  const isDarkRank = useThemeStore((s) => s.glassTheme) === 'dark';
   if (members.length === 0) return null;
 
   return (
@@ -329,16 +337,14 @@ function TopMembersSection({ members, onMemberPress, verifiedIds }: { members: T
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.topScroll}>
         {members.map((u, i) => (
           <TouchableOpacity key={u.user_id} style={s.topCard} activeOpacity={0.7} onPress={() => onMemberPress(u.user_id)}>
-            {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
-            <LinearGradient
-              colors={i === 0 ? ['rgba(255,108,36,0.14)', 'rgba(255,108,36,0.04)'] : ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+            {isDarkRank && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />}
+            {isDarkRank && <LinearGradient colors={i === 0 ? ['rgba(255,108,36,0.14)', 'rgba(255,133,64,0.06)'] : ['rgba(255,108,36,0.10)', 'rgba(255,172,125,0.06)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+            {!isWeb && <BlurView intensity={isDarkRank ? 45 : 30} tint="dark" style={StyleSheet.absoluteFill} />}
+            {!isDarkRank && <LinearGradient colors={i === 0 ? ['rgba(255,108,36,0.14)', 'rgba(255,108,36,0.04)'] : ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+            {i === 0 && <ElectricBorder borderRadius={16} width={90} height={140} />}
             {/* Specular */}
             <LinearGradient
-              colors={['transparent', i === 0 ? 'rgba(255,180,130,0.12)' : 'rgba(255,255,255,0.06)', 'transparent']}
+              colors={isDarkRank ? ['transparent', 'rgba(255,200,170,0.35)', 'transparent'] : ['transparent', i === 0 ? 'rgba(255,180,130,0.12)' : 'rgba(255,255,255,0.06)', 'transparent']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={s.topSpecular}
@@ -350,9 +356,9 @@ function TopMembersSection({ members, onMemberPress, verifiedIds }: { members: T
               </View>
             )}
             <UserAvatar name={u.user_name} avatarUrl={u.avatar_url} size={40} ring={i === 0} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-              <Text style={s.topName} numberOfLines={1}>{u.user_name.split(' ')[0]}</Text>
-              {verifiedIds.has(u.user_id) && <VerifiedBadge size={12} />}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2, marginTop: 8 }}>
+              <Text style={s.topNameInline} numberOfLines={1}>{u.user_name.split(' ')[0]}</Text>
+              {verifiedIds.has(u.user_id) && <VerifiedBadge size={11} />}
             </View>
             {u.weekly_km > 0 && (
               <Text style={s.topKm}>{u.weekly_km.toFixed(1)} km</Text>
@@ -424,37 +430,39 @@ function AchievementCard({ post }: { post: CommunityPost }) {
 
 // ─── Post Text with @Mentions ───────────────────────────────────
 
-function MentionChip({ mention, onPress, isVerified }: { mention: { userId: string; name: string; avatar_url?: string }; onPress: () => void; isVerified?: boolean }) {
+function MentionChip({ mention, onPress, isVerified, small }: { mention: { userId: string; name: string; avatar_url?: string }; onPress: () => void; isVerified?: boolean; small?: boolean }) {
   const firstName = mention.name.split(' ')[0];
   const initial = firstName.charAt(0).toUpperCase();
+  const avatarSize = small ? 16 : 24;
+  const fontSize = small ? 11 : 14;
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.7}
       style={{
-        flexDirection: 'row', alignItems: 'center', gap: 4,
+        flexDirection: 'row', alignItems: 'center', gap: small ? 3 : 4,
         backgroundColor: 'rgba(255,108,36,0.10)',
-        paddingHorizontal: 6, paddingVertical: 2,
-        borderRadius: 10, borderWidth: 0.5,
+        paddingHorizontal: small ? 4 : 6, paddingVertical: small ? 1 : 2,
+        borderRadius: small ? 8 : 10, borderWidth: 0.5,
         borderColor: 'rgba(255,108,36,0.20)',
         marginHorizontal: 2,
       }}
     >
       <View style={{
-        width: 24, height: 24, borderRadius: 12, overflow: 'hidden',
+        width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, overflow: 'hidden',
         backgroundColor: 'rgba(255,108,36,0.3)',
         justifyContent: 'center', alignItems: 'center',
       }}>
         {mention.avatar_url ? (
-          <Image source={{ uri: mention.avatar_url }} style={{ width: 24, height: 24, borderRadius: 12 }} />
+          <Image source={{ uri: mention.avatar_url }} style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }} />
         ) : (
-          <Text style={{ fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: 11 }}>{initial}</Text>
+          <Text style={{ fontFamily: FONTS.montserrat.bold, color: '#fff', fontSize: small ? 8 : 11 }}>{initial}</Text>
         )}
       </View>
-      <Text style={{ fontFamily: FONTS.montserrat.bold, color: '#FF6C24', fontSize: 14 }}>
+      <Text style={{ fontFamily: FONTS.montserrat.bold, color: '#FF6C24', fontSize }}>
         {firstName}
       </Text>
-      {isVerified && <VerifiedBadge size={10} />}
+      {isVerified && <VerifiedBadge size={small ? 8 : 10} />}
     </TouchableOpacity>
   );
 }
@@ -472,11 +480,48 @@ function PostText({
 }) {
   const mentionList = metadata?.mentions as { userId: string; name: string; avatar_url?: string }[] | undefined;
 
+  // New format: @[userId:Name] embedded in text
+  const hasNewFormat = text.includes('@[');
+
+  if (hasNewFormat) {
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    let key = 0;
+    const regex = /@\[([^:]+):([^\]]+)\]/g;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(<Text key={key++} style={s.postText}>{text.slice(lastIndex, match.index)}</Text>);
+      }
+      const mUserId = match[1];
+      const mName = match[2];
+      const mentionData = mentionList?.find(m => m.userId === mUserId) || { userId: mUserId, name: mName };
+      parts.push(
+        <MentionChip
+          key={key++}
+          mention={mentionData}
+          onPress={() => onMentionPress(mUserId)}
+          isVerified={verifiedIds?.has(mUserId)}
+        />
+      );
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < text.length) {
+      parts.push(<Text key={key++} style={s.postText}>{text.slice(lastIndex)}</Text>);
+    }
+    return (
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+        {parts}
+      </View>
+    );
+  }
+
+  // Legacy format: @Name with metadata.mentions
   if (!mentionList || mentionList.length === 0) {
     return <Text style={s.postText}>{text}</Text>;
   }
 
-  // Build parts: text segments + inline mention chips
   const parts: React.ReactNode[] = [];
   let remaining = text;
   let key = 0;
@@ -513,7 +558,7 @@ function PostText({
   );
 }
 
-function PostCard({
+const PostCard = React.memo(function PostCard({
   post,
   userId,
   onToggleEnergia,
@@ -534,7 +579,12 @@ function PostCard({
   isVerified?: boolean;
   verifiedIds?: Set<string>;
 }) {
-  const isAutoPost = post.type !== 'text';
+  const topMembers = useCommunityStore((s) => s.topMembers);
+  const isDark = useThemeStore((s) => s.glassTheme) === 'dark';
+  const rankPos = topMembers.length > 0 && topMembers[0].user_id === post.user_id ? 0
+    : topMembers.length > 1 && topMembers[1].user_id === post.user_id ? 1
+    : topMembers.length > 2 && topMembers[2].user_id === post.user_id ? 2 : -1;
+  const isAutoPost = post.type !== 'text' && post.type !== 'photo';
   const isBigAchievement = post.type === 'module_complete' || post.type === 'streak';
   const energiaScale = useSharedValue(1);
   const lottieOpacity = useSharedValue(0);
@@ -556,6 +606,7 @@ function PostCard({
 
   const handleEnergia = () => {
     if (!userId) return;
+    try { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
     const wasReacted = post.has_reacted;
     onToggleEnergia(post.id);
 
@@ -605,16 +656,18 @@ function PostCard({
   return (
     <Animated.View entering={FadeInDown.delay(Math.min(index * 60, 300)).duration(450)} style={s.postCard}>
       {/* Glass background */}
-      {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
-      <LinearGradient
+      {isDark && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />}
+      {isDark && <LinearGradient colors={['rgba(255,108,36,0.10)', 'rgba(255,133,64,0.04)', 'rgba(255,172,125,0.06)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+      {!isWeb && <BlurView intensity={isDark ? 45 : 30} tint="dark" style={StyleSheet.absoluteFill} />}
+      {!isDark && <LinearGradient
         colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
-      />
+      />}
       {/* Top specular */}
       <LinearGradient
-        colors={['transparent', 'rgba(255,255,255,0.06)', 'transparent']}
+        colors={isDark ? ['transparent', 'rgba(255,200,170,0.35)', 'transparent'] : ['transparent', 'rgba(255,255,255,0.06)', 'transparent']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
         style={s.postSpecular}
@@ -630,6 +683,9 @@ function PostCard({
             <TouchableOpacity activeOpacity={0.7} onPress={() => onUserPress(post.user_id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <Text style={s.postUserName}>{post.user_name}</Text>
               {isVerified && <VerifiedBadge size={14} />}
+              {rankPos === 0 && <RankOneBadge />}
+              {rankPos === 1 && <RankTwoBadge />}
+              {rankPos === 2 && <RankThreeBadge />}
             </TouchableOpacity>
           </View>
           <Text style={s.postTime}>{timeAgo(post.created_at)}</Text>
@@ -888,7 +944,7 @@ function PostCard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={s.actionBtn} activeOpacity={0.6} onPress={() => onOpenComments(post.id)}>
+        <TouchableOpacity style={s.actionBtn} activeOpacity={0.6} onPress={() => { try { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {} onOpenComments(post.id); }}>
           <CommentIcon size={15} />
           <Text style={s.actionText}>
             {post.comment_count > 0 ? `${post.comment_count}` : 'Comentar'}
@@ -896,6 +952,75 @@ function PostCard({
         </TouchableOpacity>
       </View>
     </Animated.View>
+  );
+});
+
+// ─── Comment Text with Mentions ──────────────────────────────────
+
+function CommentTextWithMentions({ text, onUserPress }: { text: string; onUserPress: (userId: string) => void }) {
+  const [mentionProfiles, setMentionProfiles] = useState<Record<string, { id: string; name: string; avatar_url: string | null }>>({});
+
+  const hasMentions = text.includes('@[');
+
+  // Fetch profiles for mentioned users
+  useEffect(() => {
+    if (!hasMentions) return;
+    const ids: string[] = [];
+    let m;
+    const re = /@\[([^:]+):([^\]]+)\]/g;
+    while ((m = re.exec(text)) !== null) ids.push(m[1]);
+    if (ids.length === 0) return;
+
+    (async () => {
+      const { data } = await supabase.from('profiles').select('id, name, avatar_url').in('id', ids);
+      if (data) {
+        const map: Record<string, { id: string; name: string; avatar_url: string | null }> = {};
+        data.forEach((u: any) => { map[u.id] = u; });
+        setMentionProfiles(map);
+      }
+    })();
+  }, [text, hasMentions]);
+
+  if (!hasMentions) {
+    return <Text style={s.commentMsg}>{text}</Text>;
+  }
+
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+  const regex = /@\[([^:]+):([^\]]+)\]/g;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<Text key={key++} style={s.commentMsg}>{text.slice(lastIndex, match.index)}</Text>);
+    }
+
+    const mUserId = match[1];
+    const mName = match[2];
+    const profile = mentionProfiles[mUserId];
+    const mentionData = profile || { userId: mUserId, name: mName, avatar_url: null };
+
+    parts.push(
+      <MentionChip
+        key={key++}
+        mention={{ userId: mUserId, name: mentionData.name || mName, avatar_url: mentionData.avatar_url ?? undefined }}
+        onPress={() => onUserPress(mUserId)}
+        small
+      />
+    );
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(<Text key={key++} style={s.commentMsg}>{text.slice(lastIndex)}</Text>);
+  }
+
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' }}>
+      {parts}
+    </View>
   );
 }
 
@@ -905,14 +1030,16 @@ function CommentsSection({
   postId,
   userId,
   onClose,
+  onUserPress,
   verifiedIds,
 }: {
   postId: string;
   userId: string | null;
   onClose: () => void;
+  onUserPress: (userId: string) => void;
   verifiedIds?: Set<string>;
 }) {
-  const { comments, fetchComments, addComment, deleteComment } = useCommunityStore();
+  const { comments, fetchComments, addComment, deleteComment, topMembers } = useCommunityStore();
   const [text, setText] = useState('');
   const cache = comments[postId];
   const postComments = cache?.items ?? [];
@@ -923,18 +1050,19 @@ function CommentsSection({
   const [mentions, setMentions] = useState<{ userId: string; name: string; avatar_url?: string | null }[]>([]);
   const mentionCacheRef = useRef<{ id: string; name: string; avatar_url: string | null }[]>([]);
 
-  const fetchPartners = useCallback(async (query: string) => {
+  const fetchMentionable = useCallback(async (query: string) => {
     if (!userId) return;
-    if (mentionCacheRef.current.length === 0) {
-      const { data } = await supabase.rpc('get_friends', { p_user_id: userId, p_viewer_id: userId });
-      if (data && Array.isArray(data)) {
-        mentionCacheRef.current = data.map((u: any) => ({ id: u.id, name: u.name ?? 'Usuario', avatar_url: u.avatar_url ?? null }));
-      }
+    if (query.length < 1) { setMentionResults([]); return; }
+    // Search all users, not just friends
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, name, avatar_url')
+      .ilike('name', `%${query}%`)
+      .neq('id', userId)
+      .limit(6);
+    if (data) {
+      setMentionResults(data.map((u: any) => ({ id: u.id, name: u.name ?? 'Usuário', avatar_url: u.avatar_url ?? null })));
     }
-    const filtered = query.length > 0
-      ? mentionCacheRef.current.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
-      : mentionCacheRef.current;
-    setMentionResults(filtered.slice(0, 4));
   }, [userId]);
 
   const handleTextChange = useCallback((newText: string) => {
@@ -944,13 +1072,13 @@ function CommentsSection({
       const afterAt = newText.substring(lastAtIndex + 1);
       if (!afterAt.includes(' ') && afterAt.length <= 20) {
         setMentionQuery(afterAt);
-        fetchPartners(afterAt);
+        fetchMentionable(afterAt);
         return;
       }
     }
     setMentionQuery(null);
     setMentionResults([]);
-  }, [fetchPartners]);
+  }, [fetchMentionable]);
 
   const selectMention = useCallback((user: { id: string; name: string; avatar_url: string | null }) => {
     const lastAtIndex = text.lastIndexOf('@');
@@ -969,10 +1097,19 @@ function CommentsSection({
 
   const handleSend = async () => {
     if (!text.trim() || !userId) return;
-    const msg = text.trim();
+    let msg = text.trim();
+    // Replace @Name with @[userId:Name] so we can resolve correctly (even with duplicate names)
+    for (const m of mentions) {
+      const firstName = m.name.split(' ')[0];
+      msg = msg.replace(`@${firstName}`, `@[${m.userId}:${firstName}]`);
+    }
+    // Remove unselected @mentions (typed manually without selecting)
+    msg = msg.replace(/@(\w+)/g, (match, name) => {
+      // If it's not inside [...], it wasn't selected
+      return name;
+    });
     setText('');
     setMentions([]);
-    // TODO: store mentions in comment metadata when backend supports it
     await addComment(postId, userId, msg);
   };
 
@@ -1014,14 +1151,19 @@ function CommentsSection({
         )}
         {postComments.map((c) => (
           <View key={c.id} style={s.commentRow}>
-            <UserAvatar name={c.user_name} avatarUrl={c.user_avatar} size={28} />
+            <TouchableOpacity activeOpacity={0.7} onPress={() => onUserPress(c.user_id)}>
+              <UserAvatar name={c.user_name} avatarUrl={c.user_avatar} size={28} />
+            </TouchableOpacity>
             <View style={s.commentContent}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, flexWrap: 'wrap' }}>
-                <Text style={s.commentMsg}>
+                <TouchableOpacity activeOpacity={0.7} onPress={() => onUserPress(c.user_id)}>
                   <Text style={s.commentName}>{c.user_name}</Text>
-                </Text>
+                </TouchableOpacity>
                 {verifiedIds?.has(c.user_id) && <VerifiedBadge size={12} />}
-                <Text style={s.commentMsg}>{c.content}</Text>
+                {topMembers.length > 0 && topMembers[0].user_id === c.user_id && <RankOneBadge />}
+                {topMembers.length > 1 && topMembers[1].user_id === c.user_id && <RankTwoBadge />}
+                {topMembers.length > 2 && topMembers[2].user_id === c.user_id && <RankThreeBadge />}
+                <CommentTextWithMentions text={c.content} onUserPress={onUserPress} />
               </View>
               <Text style={s.commentTime}>{timeAgo(c.created_at)}</Text>
             </View>
@@ -1108,6 +1250,7 @@ function CommentsSection({
 // ─── Compose Post ────────────────────────────────────────────────
 
 function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; userName: string; userAvatar?: string | null }) {
+  const isDarkCompose = useThemeStore((s) => s.glassTheme) === 'dark';
   const [text, setText] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const { createPost, isPosting } = useCommunityStore();
@@ -1118,45 +1261,35 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
   const [mentions, setMentions] = useState<{ userId: string; name: string; avatar_url?: string | null }[]>([]);
   const mentionCacheRef = useRef<{ id: string; name: string; avatar_url: string | null }[]>([]);
 
-  const fetchPartners = useCallback(async (query: string) => {
+  const fetchMentionable = useCallback(async (query: string) => {
     if (!userId) return;
-    // Use cached friends if available, otherwise fetch
-    if (mentionCacheRef.current.length === 0) {
-      const { data } = await supabase.rpc('get_friends', {
-        p_user_id: userId,
-        p_viewer_id: userId,
-      });
-      if (data && Array.isArray(data)) {
-        mentionCacheRef.current = data.map((u: any) => ({
-          id: u.id,
-          name: u.name ?? 'Usuario',
-          avatar_url: u.avatar_url ?? null,
-        }));
-      }
+    if (query.length < 1) { setMentionResults([]); return; }
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, name, avatar_url')
+      .ilike('name', `%${query}%`)
+      .neq('id', userId)
+      .limit(6);
+    if (data) {
+      setMentionResults(data.map((u: any) => ({ id: u.id, name: u.name ?? 'Usuário', avatar_url: u.avatar_url ?? null })));
     }
-    const filtered = query.length > 0
-      ? mentionCacheRef.current.filter((u) => u.name.toLowerCase().includes(query.toLowerCase()))
-      : mentionCacheRef.current;
-    setMentionResults(filtered);
   }, [userId]);
 
   const handleTextChange = useCallback((newText: string) => {
     setText(newText);
 
-    // Detect @ mention - look for the last @ that isn't completed
     const lastAtIndex = newText.lastIndexOf('@');
     if (lastAtIndex >= 0) {
       const afterAt = newText.substring(lastAtIndex + 1);
-      // Mention is active if no space after @ and reasonable length
       if (!afterAt.includes(' ') && afterAt.length <= 20) {
         setMentionQuery(afterAt);
-        fetchPartners(afterAt);
+        fetchMentionable(afterAt);
         return;
       }
     }
     setMentionQuery(null);
     setMentionResults([]);
-  }, [fetchPartners]);
+  }, [fetchMentionable]);
 
   const selectMention = useCallback((user: { id: string; name: string; avatar_url: string | null }) => {
     const lastAtIndex = text.lastIndexOf('@');
@@ -1185,7 +1318,14 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
 
   const handlePost = async () => {
     if ((!text.trim() && !imageUri) || !userId) return;
-    const msg = text.trim();
+    let msg = text.trim();
+    // Encode mentions with userId for accurate resolution
+    for (const m of mentions) {
+      const firstName = m.name.split(' ')[0];
+      msg = msg.replace(`@${firstName}`, `@[${m.userId}:${firstName}]`);
+    }
+    // Remove unselected @mentions
+    msg = msg.replace(/@(\w+)/g, '$1');
     const mentionData = mentions.length > 0
       ? mentions.map((m) => ({ userId: m.userId, name: m.name, avatar_url: m.avatar_url ?? null }))
       : undefined;
@@ -1246,11 +1386,9 @@ function ComposeBox({ userId, userName, userAvatar }: { userId: string | null; u
       )}
 
       <View style={s.composeCard}>
-        {!isWeb && <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.03)']}
-          style={StyleSheet.absoluteFill}
-        />
+        {isDarkCompose && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />}
+        {isDarkCompose && <LinearGradient colors={['rgba(255,108,36,0.10)', 'rgba(255,133,64,0.04)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+        {!isWeb && <BlurView intensity={isDarkCompose ? 45 : 30} tint="dark" style={StyleSheet.absoluteFill} />}
         {/* Specular */}
         <LinearGradient
           colors={['transparent', 'rgba(255,255,255,0.06)', 'transparent']}
@@ -1347,34 +1485,45 @@ function FilterTabs({ active, onChange }: { active: FeedFilter; onChange: (f: Fe
 // Backend: aggregate from community_posts + profiles
 
 function CommunityStatsBanner({ posts }: { posts: CommunityPost[] }) {
-  const uniqueUsers = new Set(posts.map((p) => p.user_id)).size;
+  const isDarkBanner = useThemeStore((s) => s.glassTheme) === 'dark';
+  const [totalUsers, setTotalUsers] = React.useState(0);
+  React.useEffect(() => {
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).then(({ count }) => {
+      if (count) setTotalUsers(count);
+    });
+  }, []);
   const totalEnergia = posts.reduce((sum, p) => sum + p.energia_count, 0);
   const totalComments = posts.reduce((sum, p) => sum + p.comment_count, 0);
 
   return (
-    <Animated.View entering={FadeInDown.delay(50).duration(500)} style={s.statsRow}>
-      {[
-        { value: uniqueUsers, label: 'Membros', lottie: null, icon: <UsersIcon size={20} /> },
-        { value: totalEnergia, label: 'Curtidas', lottie: null, icon: <EnergiaIcon size={20} active /> },
-        { value: totalComments, label: 'Conversas', lottie: null, icon: <CommentIcon size={20} /> },
-      ].map((stat, i) => (
-        <View key={stat.label} style={[s.statCard, webGlass]}>
-          {!isWeb && <BlurView intensity={35} tint="dark" style={StyleSheet.absoluteFill} />}
-          <LinearGradient
-            colors={i === 1 ? ['rgba(255,108,36,0.12)', 'rgba(255,108,36,0.04)'] : ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.04)']}
-            style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            colors={['transparent', i === 1 ? 'rgba(255,180,130,0.08)' : 'rgba(255,255,255,0.06)', 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={s.statSpecular}
-          />
-          <View style={s.statIconWrap}>{stat.icon}</View>
-          <Text style={[s.statValue, i === 1 && { color: '#FF8540' }]}>{stat.value}</Text>
-          <Text style={s.statLabel}>{stat.label}</Text>
+    <Animated.View entering={FadeInDown.delay(50).duration(500)} style={s.statsBanner}>
+      {isDarkBanner && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />}
+      {isDarkBanner && <LinearGradient colors={['rgba(255,108,36,0.10)', 'rgba(255,133,64,0.04)', 'rgba(255,172,125,0.06)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+      {!isWeb && <BlurView intensity={isDarkBanner ? 45 : 35} tint="dark" style={StyleSheet.absoluteFill} />}
+      <LinearGradient
+        colors={isDarkBanner ? ['transparent', 'rgba(255,200,170,0.35)', 'transparent'] : ['transparent', 'rgba(255,255,255,0.08)', 'transparent']}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={s.statsBannerSpecular}
+      />
+      <View style={s.statsBannerRow}>
+        <View style={s.statsBannerCol}>
+          <UsersIcon size={20} />
+          <Text style={s.statsBannerValue}>{totalUsers}</Text>
+          <Text style={s.statsBannerLabel}>membros</Text>
         </View>
-      ))}
+        <View style={s.statsBannerDivider} />
+        <View style={s.statsBannerCol}>
+          <EnergiaIcon size={20} active />
+          <Text style={[s.statsBannerValue, { color: '#FF8540' }]}>{totalEnergia}</Text>
+          <Text style={s.statsBannerLabel}>energias</Text>
+        </View>
+        <View style={s.statsBannerDivider} />
+        <View style={s.statsBannerCol}>
+          <CommentIcon size={20} />
+          <Text style={s.statsBannerValue}>{totalComments}</Text>
+          <Text style={s.statsBannerLabel}>conversas</Text>
+        </View>
+      </View>
     </Animated.View>
   );
 }
@@ -1404,6 +1553,7 @@ export default function ComunidadeScreen() {
   const { user, session } = useAuthStore();
   const { posts, topMembers, isLoading, feedFilter, setFeedFilter, fetchPosts, loadMorePosts, toggleEnergia, deletePost, fetchTopMembers } = useCommunityStore();
   const [activeComments, setActiveComments] = useState<string | null>(null);
+  const [visiblePostCount, setVisiblePostCount] = useState(8);
   const [refreshing, setRefreshing] = useState(false);
   // filter state is now managed in communityStore (feedFilter + setFeedFilter)
   const filter = feedFilter;
@@ -1436,14 +1586,15 @@ export default function ComunidadeScreen() {
   // Keep client-side matchesFilter as fallback for legacy queries
   const filteredPosts = posts;
 
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
-    fetchPosts();
-    fetchTopMembers();
+    Promise.all([fetchPosts(), fetchTopMembers()]).finally(() => setReady(true));
   }, []);
 
   // Re-fetch when filter changes (server-side filtering)
   useEffect(() => {
-    fetchPosts(true);
+    if (ready) fetchPosts(true);
   }, [feedFilter]);
 
   const onRefresh = useCallback(async () => {
@@ -1459,6 +1610,10 @@ export default function ComunidadeScreen() {
     },
     [userId, toggleEnergia],
   );
+
+  const handleOpenComments = useCallback((id: string) => {
+    setActiveComments((prev) => (prev === id ? null : id));
+  }, []);
 
   const handleDelete = useCallback(
     (postId: string) => {
@@ -1490,6 +1645,22 @@ export default function ComunidadeScreen() {
     return layoutMeasurement.height + contentOffset.y >= contentSize.height - 300;
   };
 
+  if (!ready) {
+    return (
+      <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <LottieView
+            source={require('../../assets/thunder-energia.json')}
+            autoPlay
+            loop
+            speed={0.7}
+            style={{ width: 140, height: 140 }}
+          />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Animated.ScrollView
@@ -1502,7 +1673,22 @@ export default function ComunidadeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FF6C24" progressBackgroundColor="#1A1008" />
         }
         onMomentumScrollEnd={(e) => {
-          if (isCloseToBottom(e)) loadMorePosts();
+          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 800) {
+            if (visiblePostCount < filteredPosts.length) {
+              setVisiblePostCount(c => Math.min(c + 8, filteredPosts.length));
+            }
+            loadMorePosts();
+          }
+        }}
+        onScrollEndDrag={(e) => {
+          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+          if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 800) {
+            if (visiblePostCount < filteredPosts.length) {
+              setVisiblePostCount(c => Math.min(c + 8, filteredPosts.length));
+            }
+            loadMorePosts();
+          }
         }}
       >
         {/* ══ HEADER ══ */}
@@ -1535,7 +1721,7 @@ export default function ComunidadeScreen() {
         </Animated.View>
 
         {/* ══ FILTER TABS ══ */}
-        {posts.length > 0 && <FilterTabs active={filter} onChange={setFilter} />}
+        <FilterTabs active={filter} onChange={setFilter} />
 
         {/* ══ FEED ══ */}
         {isLoading && posts.length === 0 ? (
@@ -1558,13 +1744,13 @@ export default function ComunidadeScreen() {
               <View style={s.feedLabelLine} />
             </View>
 
-            {filteredPosts.map((post, i) => (
+            {filteredPosts.slice(0, visiblePostCount).map((post, i) => (
               <React.Fragment key={post.id}>
                 <PostCard
                   post={post}
                   userId={userId}
                   onToggleEnergia={handleEnergia}
-                  onOpenComments={(id) => setActiveComments(activeComments === id ? null : id)}
+                  onOpenComments={handleOpenComments}
                   onDelete={handleDelete}
                   onUserPress={handleUserPress}
                   index={i}
@@ -1572,7 +1758,7 @@ export default function ComunidadeScreen() {
                   verifiedIds={verifiedIds}
                 />
                 {activeComments === post.id && (
-                  <CommentsSection postId={post.id} userId={userId} onClose={() => setActiveComments(null)} verifiedIds={verifiedIds} />
+                  <CommentsSection postId={post.id} userId={userId} onClose={() => setActiveComments(null)} onUserPress={handleUserPress} verifiedIds={verifiedIds} />
                 )}
               </React.Fragment>
             ))}
@@ -1609,6 +1795,18 @@ const s = StyleSheet.create({
   avatarText: { fontFamily: FONTS.montserrat.bold, color: '#fff' },
 
   // Stats Banner
+  statsBanner: {
+    borderRadius: 24, overflow: 'hidden', borderWidth: 0.5,
+    borderColor: 'rgba(255,140,100,0.2)', marginBottom: 20,
+    paddingVertical: 20, paddingHorizontal: 16,
+    shadowColor: '#FF6C24', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.1, shadowRadius: 24,
+  },
+  statsBannerSpecular: { position: 'absolute', top: 0, left: 0, right: 0, height: 1 },
+  statsBannerRow: { flexDirection: 'row', alignItems: 'center' },
+  statsBannerCol: { flex: 1, alignItems: 'center' },
+  statsBannerValue: { fontFamily: 'Montserrat_700Bold', color: '#fff', fontSize: 16, marginTop: 6 },
+  statsBannerLabel: { fontFamily: 'Montserrat_400Regular', color: 'rgba(255,255,255,0.3)', fontSize: 10, marginTop: 2 },
+  statsBannerDivider: { width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.08)' },
   statsRow: { flexDirection: 'row', gap: 10, marginBottom: 28 },
   statCard: {
     flex: 1, borderRadius: 16, overflow: 'hidden', borderWidth: 0.5,
@@ -1628,7 +1826,8 @@ const s = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 16,
   },
   topSpecular: { position: 'absolute', top: 0, left: '10%', right: '10%', height: 1, zIndex: 1 },
-  topName: { fontFamily: FONTS.montserrat.semibold, color: '#fff', fontSize: 11, marginTop: 8, zIndex: 2 },
+  topName: { fontFamily: FONTS.montserrat.semibold, color: '#fff', fontSize: 11, marginTop: 8, zIndex: 2, textAlign: 'center' },
+  topNameInline: { fontFamily: FONTS.montserrat.semibold, color: '#fff', fontSize: 11, zIndex: 2 },
   topKm: { fontFamily: FONTS.montserrat.regular, color: 'rgba(255,255,255,0.45)', fontSize: 10, marginTop: 2, zIndex: 2 },
   topStatRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 4, zIndex: 2 },
   topStatValue: { fontFamily: FONTS.montserrat.bold, color: '#FF8540', fontSize: 11 },
@@ -1759,7 +1958,7 @@ const s = StyleSheet.create({
 
   // Comments Sheet
   commentsSheet: {
-    borderRadius: 18, borderWidth: 0.5,
+    borderRadius: 18, borderWidth: 0.5, overflow: 'hidden',
     borderColor: 'rgba(255,255,255,0.1)', marginBottom: 14, marginTop: -6, maxHeight: 420,
   },
   commentsHandle: {

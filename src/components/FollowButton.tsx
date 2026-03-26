@@ -26,7 +26,7 @@ let Audio: any = null;
 try { Audio = require('expo-av').Audio; } catch {}
 
 const THUNDER_ANIM = require('../../assets/thunder-energia.json');
-const RUNNING_ANIM = require('../../assets/running.json');
+const RUNNING_ANIM = require('../../assets/running-dark.json');
 const FIST_BUMP_ANIM = require('../../assets/fist-bump.json');
 const SOUND_CHARGING = require('../../assets/sounds/spark-charging.wav');
 const SOUND_RELEASE = require('../../assets/sounds/spark-release.wav');
@@ -267,6 +267,12 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
     setIsCharging(true);
     setKmDisplay('0.0');
 
+    // Force runner Lottie to play (autoPlay doesn't work on all devices)
+    setTimeout(() => {
+      runnerRef.current?.reset();
+      runnerRef.current?.play();
+    }, 50);
+
     scale.value = withTiming(0.97, { duration: 150 });
     progress.value = withTiming(1, {
       duration: CHARGE_MS,
@@ -396,9 +402,10 @@ export function FollowButton({ relationship, isLoading, onFollow, onUnfollow, on
         <LottieView
           ref={runnerRef}
           source={RUNNING_ANIM}
-          autoPlay
-          loop
+          autoPlay={true}
+          loop={true}
           speed={2.5}
+          renderMode="AUTOMATIC"
           style={styles.runnerLottie}
         />
       </Animated.View>

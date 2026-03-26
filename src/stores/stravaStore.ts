@@ -157,7 +157,13 @@ interface StravaState {
   isLoadingRuns: boolean;
   totalSparksEarned: number;
 
+  // New runs notification
+  hasNewRuns: boolean;
+  newRunsCount: number;
+  unclaimedSparks: number;
+
   // Actions
+  reset: () => void;
   checkConnection: (userId: string) => Promise<void>;
   connectStrava: (code: string, userId: string) => Promise<{ error: string | null }>;
   disconnectStrava: () => Promise<void>;
@@ -165,6 +171,8 @@ interface StravaState {
   syncWeeklyStats: () => Promise<void>;
   syncLifetimeStats: () => Promise<void>;
   setWeeklyGoal: (km: number) => Promise<void>;
+  checkNewRuns: (userId: string) => Promise<void>;
+  claimNewRuns: (userId: string) => Promise<void>;
   fetchRuns: (userId: string) => Promise<void>;
   syncAndAwardRuns: (userId: string) => Promise<void>;
 }
@@ -213,6 +221,18 @@ export const useStravaStore = create<StravaState>((set, get) => ({
   runs: [],
   isLoadingRuns: false,
   totalSparksEarned: 0,
+  hasNewRuns: false,
+  newRunsCount: 0,
+  unclaimedSparks: 0,
+
+  reset: () => set({
+    isConnected: false, isLoading: false, isSyncing: false, connection: null,
+    weeklyKm: [0, 0, 0, 0, 0, 0, 0], weeklyTotal: 0, weeklyGoal: 20,
+    lifetimeDistanceKm: 0, lifetimeRunCount: 0, lifetimeMovingTimeHours: 0,
+    lifetimeElevationM: 0, avgPace: '0:00', monthlyKm: [], lastSyncedAt: null,
+    runs: [], isLoadingRuns: false, totalSparksEarned: 0,
+    hasNewRuns: false, newRunsCount: 0, unclaimedSparks: 0,
+  }),
 
   // ── Check if user has Strava connected ──
   checkConnection: async (userId) => {
@@ -301,7 +321,7 @@ export const useStravaStore = create<StravaState>((set, get) => ({
               // Pull name if user profile doesn't have one yet
               const { data: currentProfile } = await supabase
                 .from('profiles')
-                .select('name, weight_kg, height_cm')
+                .select('name, avatar_url, weight_kg, height_cm')
                 .eq('id', userId)
                 .single();
 
@@ -319,6 +339,10 @@ export const useStravaStore = create<StravaState>((set, get) => ({
                   // keep it
                 } else {
                   delete profileUpdates.weight_kg;
+                }
+                // Pull avatar from Strava if user doesn't have one
+                if (!currentProfile.avatar_url && athlete.profile && !athlete.profile.includes('avatar/athlete/large')) {
+                  profileUpdates.avatar_url = athlete.profile;
                 }
               }
 
@@ -541,6 +565,47 @@ export const useStravaStore = create<StravaState>((set, get) => ({
     }
   },
 
+  checkNewRuns: async (userId) => {
+    try {
+      // Get last_seen_runs_at from profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('last_seen_runs_at')
+        .eq('id', userId)
+        .single();
+
+      const lastSeen = profile?.last_seen_runs_at || '2000-01-01T00:00:00Z';
+
+      // Count runs and sparks since last seen
+      const { data: newRuns } = await supabase
+        .from('strava_awarded_runs')
+        .select('sparks_awarded')
+        .eq('user_id', userId)
+        .gt('created_at', lastSeen);
+
+      if (newRuns && newRuns.length > 0) {
+        const totalSparks = newRuns.reduce((sum: number, r: any) => sum + (r.sparks_awarded || 0), 0);
+        set({
+          hasNewRuns: true,
+          newRunsCount: newRuns.length,
+          unclaimedSparks: totalSparks,
+        });
+      } else {
+        set({ hasNewRuns: false, newRunsCount: 0, unclaimedSparks: 0 });
+      }
+    } catch (e) {
+      console.warn('checkNewRuns error:', e);
+    }
+  },
+
+  claimNewRuns: async (userId) => {
+    await supabase
+      .from('profiles')
+      .update({ last_seen_runs_at: new Date().toISOString() })
+      .eq('id', userId);
+    set({ hasNewRuns: false, newRunsCount: 0, unclaimedSparks: 0 });
+  },
+
   fetchRuns: async (userId) => {
     set({ isLoadingRuns: true });
     try {
@@ -624,27 +689,29 @@ export const useStravaStore = create<StravaState>((set, get) => ({
 
       let totalNewSparks = 0;
 
-      for (const activity of newRuns) {
+      // Batch insert all new runs at once
+      const runsToInsert = newRuns.map((activity: any) => {
         const distanceKm = Math.round((activity.distance / 1000) * 100) / 100;
-        const sparks = Math.floor(distanceKm); // 1 spark per km
+        const sparks = Math.floor(distanceKm);
+        return { distanceKm, sparks, activity };
+      }).filter((r: any) => r.sparks > 0);
 
-        if (sparks <= 0) continue;
-
-        // Insert awarded run
-        await supabase.from('strava_awarded_runs').insert({
-          user_id: userId,
-          strava_activity_id: activity.id,
-          distance_km: distanceKm,
-          sparks_awarded: sparks,
-          activity_name: activity.name ?? 'Corrida',
-          activity_date: activity.start_date_local,
-          moving_time_seconds: activity.moving_time ?? 0,
-          average_speed: activity.average_speed ?? 0,
-          workout_type: activity.workout_type ?? null,
-          summary_polyline: activity.map?.summary_polyline ?? null,
-        });
-
-        totalNewSparks += sparks;
+      if (runsToInsert.length > 0) {
+        await supabase.from('strava_awarded_runs').insert(
+          runsToInsert.map((r: any) => ({
+            user_id: userId,
+            strava_activity_id: r.activity.id,
+            distance_km: r.distanceKm,
+            sparks_awarded: r.sparks,
+            activity_name: r.activity.name ?? 'Corrida',
+            activity_date: r.activity.start_date_local,
+            moving_time_seconds: r.activity.moving_time ?? 0,
+            average_speed: r.activity.average_speed ?? 0,
+            workout_type: r.activity.workout_type ?? null,
+            summary_polyline: r.activity.map?.summary_polyline ?? null,
+          }))
+        );
+        totalNewSparks = runsToInsert.reduce((sum: number, r: any) => sum + r.sparks, 0);
       }
 
       // Backfill polylines for old runs that don't have one

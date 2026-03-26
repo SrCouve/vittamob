@@ -26,6 +26,7 @@ import Svg, { Path, Circle, Rect, Polyline } from 'react-native-svg';
 import { FONTS } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScrollY } from '../context/ScrollContext';
+import { useStravaStore } from '../stores/stravaStore';
 
 const SPRING = { damping: 26, stiffness: 320, mass: 0.8 };
 const SPRING_FAST = { damping: 22, stiffness: 400, mass: 0.7 };
@@ -181,13 +182,17 @@ function MainPill({ activeIndex }: { activeIndex: number }) {
 
 function ProfilePill({ active }: { active: boolean }) {
   const tab = tabs[3];
+  const hasNewRuns = useStravaStore((s) => s.hasNewRuns);
 
   const widthStyle = useAnimatedStyle(() => ({
     width: withSpring(active ? 104 : 50, SPRING),
   }));
 
   return (
-    <TouchableOpacity onPress={() => router.replace(tab.href as any)} activeOpacity={0.7}>
+    <TouchableOpacity onPress={() => router.replace(tab.href as any)} activeOpacity={0.7} style={{ position: 'relative' }}>
+      {hasNewRuns && (
+        <View style={{ position: 'absolute', top: 2, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF6C24', borderWidth: 2, borderColor: 'rgba(13,13,13,0.9)', zIndex: 20 }} />
+      )}
       <Animated.View style={[styles.profilePill, widthStyle, webNavGlass]}>
         {!isWeb && <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />}
         {active ? (

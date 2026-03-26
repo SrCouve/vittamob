@@ -28,6 +28,7 @@ export interface TopMember {
   weekly_km: number;
   weekly_energia: number;
   post_count: number;
+  is_verified: boolean;
 }
 
 export interface PostComment {
@@ -66,6 +67,7 @@ interface CommunityState {
   addComment: (postId: string, userId: string, content: string) => Promise<void>;
   deleteComment: (commentId: string, postId: string, userId: string) => Promise<void>;
   fetchTopMembers: () => Promise<void>;
+  reset: () => void;
 }
 
 const POST_PAGE_SIZE = 20;
@@ -200,6 +202,11 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
   isPosting: false,
   hasMore: true,
   feedFilter: 'all' as FeedFilter,
+
+  reset: () => {
+    cacheAccessOrder = [];
+    set({ posts: [], comments: {}, topMembers: [], isLoading: false, isLoadingMore: false, isPosting: false, hasMore: true, feedFilter: 'all' as FeedFilter });
+  },
 
   setFeedFilter: (filter: FeedFilter) => {
     set({ feedFilter: filter });
@@ -672,6 +679,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
             weekly_km: Number(m.weekly_km) || 0,
             weekly_energia: Number(m.weekly_energia) || 0,
             post_count: Number(m.post_count) || 0,
+            is_verified: m.is_verified ?? false,
           })) });
           return;
         }
@@ -685,6 +693,7 @@ export const useCommunityStore = create<CommunityState>((set, get) => ({
         weekly_km: Number(m.weekly_km) || 0,
         weekly_energia: Number(m.weekly_energia) || 0,
         post_count: Number(m.post_count) || 0,
+        is_verified: m.is_verified ?? false,
       })) });
     } catch (e) {
       console.error('fetchTopMembers error:', e);

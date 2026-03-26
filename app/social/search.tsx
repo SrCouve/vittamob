@@ -51,25 +51,17 @@ function SearchBigIcon({ size = 56, color = 'rgba(255,255,255,0.12)' }: { size?:
 
 // ── User Card (with follow button for search) ──
 
-function UserCard({ item, myId }: { item: UserListItem; myId: string }) {
+function UserCard({ item, myId, followingSet }: { item: UserListItem; myId: string; followingSet: Set<string> }) {
   const initial = (item.name ?? 'U').charAt(0).toUpperCase();
   const isMe = item.id === myId;
   const { followUser, unfollowUser, isFollowLoading } = useSocialStore();
-  const [isFollowing, setIsFollowing] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(followingSet.has(item.id));
   const loading = isFollowLoading[item.id] ?? false;
 
-  // Check if already following on mount
+  // Sync with parent's batch-fetched data
   useEffect(() => {
-    if (isMe) return;
-    supabase
-      .from('follows')
-      .select('follower_id')
-      .eq('follower_id', myId)
-      .eq('following_id', item.id)
-      .then(({ data }) => {
-        if (data && data.length > 0) setIsFollowing(true);
-      });
-  }, [item.id, myId]);
+    setIsFollowing(followingSet.has(item.id));
+  }, [followingSet, item.id]);
 
   const handleFollow = useCallback(async () => {
     if (loading) return;
@@ -143,6 +135,22 @@ export default function SearchScreen() {
   const inputRef = useRef<TextInput>(null);
 
   const myId = session?.user?.id ?? '';
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
+
+  // Batch fetch follow status when results change
+  useEffect(() => {
+    if (!myId || searchResults.length === 0) { setFollowingSet(new Set()); return; }
+    const ids = searchResults.map(u => u.id).filter(id => id !== myId);
+    if (ids.length === 0) return;
+    supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', myId)
+      .in('following_id', ids)
+      .then(({ data }) => {
+        setFollowingSet(new Set((data || []).map((d: any) => d.following_id)));
+      });
+  }, [searchResults, myId]);
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -179,8 +187,8 @@ export default function SearchScreen() {
   }, []);
 
   const renderItem = useCallback(({ item }: { item: UserListItem }) => (
-    <UserCard item={item} myId={myId} />
-  ), [myId]);
+    <UserCard item={item} myId={myId} followingSet={followingSet} />
+  ), [myId, followingSet]);
 
   const keyExtractor = useCallback((item: UserListItem) => item.id, []);
 

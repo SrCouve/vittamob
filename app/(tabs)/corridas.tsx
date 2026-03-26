@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useThemeStore } from '../../src/stores/themeStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   FadeInDown,
@@ -170,12 +171,15 @@ function formatDateFull(dateStr: string): string {
 // ─── Stats Hero ──────────────────────────────────────────────────
 
 function StatsHero({ runs, totalSparks }: { runs: StravaRun[]; totalSparks: number }) {
+  const isDarkH = useThemeStore((s) => s.glassTheme) === 'dark';
   const totalKm = runs.reduce((sum, r) => sum + r.distance_km, 0);
   const totalTime = runs.reduce((sum, r) => sum + r.moving_time_seconds, 0);
 
   return (
     <Animated.View entering={FadeInDown.delay(100).duration(600)} style={s.heroCard}>
-      {!isWeb && <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />}
+      {isDarkH && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />}
+      {isDarkH && <LinearGradient colors={['rgba(255,108,36,0.10)', 'rgba(255,133,64,0.04)', 'rgba(255,172,125,0.06)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+      {!isWeb && <BlurView intensity={isDarkH ? 45 : 40} tint="dark" style={StyleSheet.absoluteFill} />}
       <LinearGradient
         colors={['rgba(255,108,36,0.14)', 'rgba(255,108,36,0.04)', 'rgba(255,255,255,0.04)']}
         start={{ x: 0, y: 0 }}
@@ -889,12 +893,15 @@ function ShareModal({ run, visible, onClose }: { run: StravaRun | null; visible:
 // ─── Run Card ────────────────────────────────────────────────────
 
 function RunCard({ run, index, onShare, onPostRun, readOnly, hideRoutes }: { run: StravaRun; index: number; onShare: (run: StravaRun) => void; onPostRun?: (run: StravaRun) => void; readOnly?: boolean; hideRoutes?: boolean }) {
+  const isDarkR = useThemeStore((s) => s.glassTheme) === 'dark';
   return (
     <Animated.View
       entering={FadeInDown.delay(Math.min(index * 60, 400)).duration(450)}
       style={s.runCard}
     >
-      {!isWeb && <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />}
+      {isDarkR && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' }} />}
+      {isDarkR && <LinearGradient colors={['rgba(255,108,36,0.10)', 'rgba(255,133,64,0.04)', 'rgba(255,172,125,0.06)']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+      {!isWeb && <BlurView intensity={isDarkR ? 45 : 25} tint="dark" style={StyleSheet.absoluteFill} />}
       <LinearGradient
         colors={['rgba(255,255,255,0.07)', 'rgba(255,255,255,0.02)']}
         start={{ x: 0, y: 0 }}
@@ -1020,6 +1027,7 @@ function EmptyRuns({ isConnected }: { isConnected: boolean }) {
 // ─── Reusable Content (used inside perfil.tsx tab) ──────────────
 
 export function CorridasContent({ userId, readOnly, hideRoutes }: { userId: string | null; readOnly?: boolean; hideRoutes?: boolean }) {
+  const isDarkC = useThemeStore((s) => s.glassTheme) === 'dark';
   // When readOnly, use LOCAL state to avoid corrupting the global stravaStore
   const store = useStravaStore();
   const { createPost } = useCommunityStore();
@@ -1134,9 +1142,16 @@ export function CorridasContent({ userId, readOnly, hideRoutes }: { userId: stri
             <View style={s.listHeaderLine} />
           </View>
 
-          {runs.map((run, i) => (
+          {runs.slice(0, 10).map((run, i) => (
             <RunCard key={run.id} run={run} index={i} onShare={setShareRun} onPostRun={!readOnly ? handlePostRun : undefined} readOnly={readOnly} hideRoutes={hideRoutes} />
           ))}
+          {runs.length > 10 && (
+            <TouchableOpacity onPress={() => {}} style={{ alignItems: 'center', paddingVertical: 16 }}>
+              <Text style={{ fontFamily: 'Montserrat_500Medium', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>
+                Mostrando 10 de {runs.length} corridas
+              </Text>
+            </TouchableOpacity>
+          )}
         </>
       )}
     </>
@@ -1146,6 +1161,7 @@ export function CorridasContent({ userId, readOnly, hideRoutes }: { userId: stri
 // ─── Records Content (used inside perfil.tsx tab) ────────────────
 
 export function RecordsContent({ userId, readOnly }: { userId: string | null; readOnly?: boolean }) {
+  const isDarkRec = useThemeStore((s) => s.glassTheme) === 'dark';
   const store = useStravaStore();
   const [localRuns, setLocalRuns] = useState<StravaRun[]>([]);
   const [localLoading, setLocalLoading] = useState(false);

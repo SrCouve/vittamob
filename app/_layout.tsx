@@ -19,6 +19,8 @@ import {
   PlayfairDisplay_600SemiBold,
   PlayfairDisplay_700Bold,
 } from '@expo-google-fonts/playfair-display';
+import { PostHogProvider } from 'posthog-react-native';
+import { posthog } from '../src/lib/posthog';
 import { BackgroundOrbs } from '../src/components/BackgroundOrbs';
 import { SplashTransition } from '../src/components/SplashTransition';
 import { useAuthStore } from '../src/stores/authStore';
@@ -77,13 +79,35 @@ export default function RootLayout() {
   // Fetch profile + points + register push when user logs in
   useEffect(() => {
     if (session?.user) {
+      // Critical: fetch immediately
       fetchProfile(session.user.id);
       fetchBalance(session.user.id);
       checkConnection(session.user.id);
-      registerPushToken(session.user.id);
-      clearBadge();
+
+      // Deferred: run after UI is ready
+      setTimeout(() => {
+        require('../src/stores/stravaStore').useStravaStore.getState().checkNewRuns(session.user.id);
+        registerPushToken(session.user.id);
+        clearBadge();
+        posthog.identify(session.user.id, { email: session.user.email || '' });
+      }, 2000);
+
+      // Ping online status every 2 min
+      const { supabase } = require('../src/lib/supabase');
+      const ping = () => supabase.from('profiles').update({ last_active_at: new Date().toISOString() }).eq('id', session.user.id);
+      ping();
+      const pingInterval = setInterval(ping, 120000);
+      return () => clearInterval(pingInterval);
     }
   }, [session?.user?.id]);
+
+  // Track screen views for PostHog (expo-router doesn't auto-capture)
+  useEffect(() => {
+    if (segments.length > 0) {
+      const screen = '/' + segments.join('/');
+      posthog.screen(screen);
+    }
+  }, [segments]);
 
   // Handle notification taps → deep link
   useEffect(() => {
@@ -128,6 +152,7 @@ export default function RootLayout() {
   if (!fontsLoaded || !isInitialized) return null;
 
   return (
+    <PostHogProvider client={posthog} autocapture={{ captureTouches: true, captureScreens: false }}>
     <ThemeProvider value={VittaTheme}>
       <View style={styles.container}>
         <LinearGradient
@@ -149,6 +174,7 @@ export default function RootLayout() {
         />
       </View>
     </ThemeProvider>
+    </PostHogProvider>
   );
 }
 

@@ -87,6 +87,7 @@ interface SocialState {
   myFriendsCount: number;
 
   // Actions
+  reset: () => void;
   fetchPublicProfile: (viewerId: string, targetId: string) => Promise<void>;
   followUser: (followerId: string, followingId: string) => Promise<'mutual' | 'followed' | 'requested' | 'error'>;
   unfollowUser: (followerId: string, followingId: string) => Promise<void>;
@@ -135,6 +136,15 @@ export const useSocialStore = create<SocialState>((set, get) => ({
   myFollowersCount: 0,
   myFollowingCount: 0,
   myFriendsCount: 0,
+
+  reset: () => set({
+    viewingProfile: null, isLoadingProfile: false,
+    followers: [], following: [], friends: [], searchResults: [],
+    followRequests: [], followRequestsCount: 0,
+    mutualFollows: [], mutualFollowsCount: 0,
+    isMuted: false, isLoadingList: false, isLoadingSearch: false, isFollowLoading: {},
+    myFollowersCount: 0, myFollowingCount: 0, myFriendsCount: 0,
+  }),
 
   fetchPublicProfile: async (viewerId, targetId) => {
     set({ isLoadingProfile: true });

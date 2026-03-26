@@ -23,11 +23,14 @@ interface MedalState {
   isLoading: boolean;
   fetchMedals: (userId: string) => Promise<void>;
   updatePhoto: (medalId: string, photoUrl: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const useMedalStore = create<MedalState>((set, get) => ({
   medals: [],
   isLoading: false,
+
+  reset: () => set({ medals: [], isLoading: false }),
 
   fetchMedals: async (userId) => {
     set({ isLoading: true });

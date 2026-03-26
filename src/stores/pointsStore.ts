@@ -17,12 +17,15 @@ interface PointsState {
   fetchBalance: (userId: string) => Promise<void>;
   fetchTransactions: (userId: string) => Promise<void>;
   awardPoints: (userId: string, amount: number, type: string, description: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const usePointsStore = create<PointsState>((set, get) => ({
   balance: 0,
   transactions: [],
   isLoading: false,
+
+  reset: () => set({ balance: 0, transactions: [], isLoading: false }),
 
   fetchBalance: async (userId) => {
     const { data } = await supabase

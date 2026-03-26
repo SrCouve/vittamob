@@ -29,6 +29,7 @@ interface UserState {
   fetchProfile: (userId: string) => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: string | null }>;
   refreshPoints: () => Promise<void>;
+  reset: () => void;
 }
 
 export const useUserStore = create<UserState>((set, get) => ({
@@ -64,6 +65,8 @@ export const useUserStore = create<UserState>((set, get) => ({
     set({ profile: { ...profile, ...updates } });
     return { error: null };
   },
+
+  reset: () => set({ profile: null, isLoading: false }),
 
   refreshPoints: async () => {
     const profile = get().profile;

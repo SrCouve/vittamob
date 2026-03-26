@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Alert, Image, Dimensions, ActivityIndicator, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Platform,
+  Alert, Dimensions, ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,14 +11,23 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import Svg, { Path, Circle, Polyline, Line, Rect } from 'react-native-svg';
 import { router, useFocusEffect } from 'expo-router';
 import { GlassCard } from '../../src/components/GlassCard';
+import { SparkClaimModal } from '../../src/components/SparkClaimModal';
 import { VerifiedBadge } from '../../src/components/VerifiedBadge';
+import { RankOneBadge, RankTwoBadge, RankThreeBadge } from '../../src/components/RankOneBadge';
+import { UserRankBadge } from '../../src/components/UserRankBadge';
+import { ElectricBorder } from '../../src/components/ElectricBorder';
+import { useCommunityStore } from '../../src/stores/communityStore';
 import LottieView from 'lottie-react-native';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useUserStore } from '../../src/stores/userStore';
+import { supabase } from '../../src/lib/supabase';
 import { useStravaStore, STRAVA_CLIENT_ID } from '../../src/stores/stravaStore';
+import { useCoachStore } from '../../src/stores/coachStore';
+import { useThemeStore } from '../../src/stores/themeStore';
 import { useSocialStore } from '../../src/stores/socialStore';
-import { useCommunityStore } from '../../src/stores/communityStore';
 import { CorridasContent, RecordsContent } from './corridas';
+
+const isWeb = Platform.OS === 'web';
 
 // Lazy-load native modules (not available in Expo Go)
 let AuthSession: typeof import('expo-auth-session') | null = null;
@@ -37,6 +47,9 @@ const FIRE_ANIM = require('../../assets/fire-emoji.json');
 const CELEBRATION_ANIM = require('../../assets/celebration.json');
 const CALENDAR_ANIM = require('../../assets/calendar-weekly.json');
 const HIKER_ANIM = require('../../assets/hiker-journey.json');
+
+let Haptics: any = null;
+try { Haptics = require('expo-haptics'); } catch {}
 
 const { width: SW } = Dimensions.get('window');
 
@@ -125,6 +138,42 @@ function UsersIcon() {
   );
 }
 
+function LockIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z" />
+      <Path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </Svg>
+  );
+}
+
+function BellIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+      <Path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </Svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(239,68,68,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 6h18" />
+      <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <Path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </Svg>
+  );
+}
+
+function ChevronIcon() {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M9 18l6-6-6-6" />
+    </Svg>
+  );
+}
+
 const DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
 // Strava OAuth discovery
@@ -151,8 +200,17 @@ export default function PerfilScreen() {
   const { session, signOut } = useAuthStore();
   const { profile } = useUserStore();
   const strava = useStravaStore();
+  const { hasCoach, fetchCoachProfile } = useCoachStore();
+  const { glassTheme, toggleGlassTheme } = useThemeStore();
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('perfil');
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [showSparkClaim, setShowSparkClaim] = useState(false);
+  const topMembers = useCommunityStore((s) => s.topMembers);
+  const myId = session?.user?.id;
+  const isNumberOne = topMembers.length > 0 && topMembers[0].user_id === myId;
+  const isNumberTwo = topMembers.length > 1 && topMembers[1].user_id === myId;
+  const isNumberThree = topMembers.length > 2 && topMembers[2].user_id === myId;
   const { myFollowersCount, myFollowingCount, myFriendsCount, fetchMyCounts, followRequestsCount, fetchFollowRequests } = useSocialStore();
   const { createPost } = useCommunityStore();
 
@@ -195,6 +253,7 @@ export default function PerfilScreen() {
     useCallback(() => {
       if (session?.user?.id) {
         fetchMyCounts(session.user.id);
+        fetchCoachProfile(session.user.id);
         if (profile?.is_private) {
           fetchFollowRequests(session.user.id);
         }
@@ -273,18 +332,77 @@ export default function PerfilScreen() {
   };
   const onScaleTap = () => scaleRef.current?.play();
 
+  const [showSettings, setShowSettings] = useState(false);
+
   const handleLogout = () => {
+    setShowSettings(false);
+    Alert.alert('Sair da conta', 'Tem certeza que deseja sair?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Sair', style: 'destructive', onPress: () => signOut() },
+    ]);
+  };
+
+  const handleDeleteAccount = () => {
+    setShowSettings(false);
     Alert.alert(
-      'Sair da conta',
-      'Tem certeza que deseja sair?',
+      'Excluir conta',
+      'Essa ação é permanente. Todos os seus dados serão apagados. Deseja continuar?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Sair', style: 'destructive', onPress: () => signOut() },
-      ]
+        {
+          text: 'Excluir minha conta',
+          style: 'destructive',
+          onPress: async () => {
+            // Delete profile (cascade will handle related data)
+            const uid = session?.user?.id;
+            if (uid) {
+              await supabase.from('profiles').delete().eq('id', uid);
+              await supabase.auth.signOut();
+            }
+            signOut();
+          },
+        },
+      ],
     );
   };
 
+  const handleTogglePrivacy = async () => {
+    const uid = session?.user?.id;
+    if (!uid || !profile) return;
+    const newPrivate = !profile.is_private;
+    await supabase.from('profiles').update({ is_private: newPrivate }).eq('id', uid);
+    useUserStore.getState().fetchProfile(uid);
+  };
+
+  const [notificationsOn, setNotificationsOn] = useState(false);
+
+  const handleToggleNotifications = async () => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    if (notificationsOn) {
+      await supabase.from('profiles').update({ expo_push_token: null }).eq('id', uid);
+      setNotificationsOn(false);
+      Alert.alert('Notificações desativadas');
+    } else {
+      try {
+        const Notifications = require('expo-notifications');
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status !== 'granted') {
+          const { status: s2 } = await Notifications.requestPermissionsAsync();
+          if (s2 !== 'granted') { Alert.alert('Permissão negada', 'Ative nas configurações do sistema.'); return; }
+        }
+        const tokenData = await Notifications.getExpoPushTokenAsync();
+        await supabase.from('profiles').update({ expo_push_token: tokenData.data }).eq('id', uid);
+        setNotificationsOn(true);
+        Alert.alert('Notificações ativadas');
+      } catch {
+        Alert.alert('Erro', 'Não foi possível ativar notificações neste dispositivo.');
+      }
+    }
+  };
+
   return (
+  <>
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: 120 }]}
@@ -301,7 +419,7 @@ export default function PerfilScreen() {
           >
             <EditIcon />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => Alert.alert('Em breve', 'Configuracoes em desenvolvimento.')}>
+          <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7} onPress={() => setShowSettings(true)}>
             <SettingsIcon />
           </TouchableOpacity>
         </View>
@@ -313,6 +431,7 @@ export default function PerfilScreen() {
           <View style={styles.profileTop}>
             {/* Avatar */}
             <View style={styles.avatarWrap}>
+              {isNumberOne && <ElectricBorder borderRadius={42} width={84} height={84} intense />}
               <View style={styles.avatarRing}>
                 <LinearGradient
                   colors={['#FF6C24', '#FF8540', '#FFAC7D']}
@@ -321,7 +440,7 @@ export default function PerfilScreen() {
                   end={{ x: 1, y: 1 }}
                 />
               </View>
-              <View style={styles.avatarInner}>
+              <TouchableOpacity activeOpacity={0.9} onPress={() => profile?.avatar_url && setShowAvatarModal(true)} style={styles.avatarInner}>
                 {profile?.avatar_url ? (
                   <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
                 ) : (
@@ -330,7 +449,7 @@ export default function PerfilScreen() {
                     <Text style={styles.avatarText}>{initial}</Text>
                   </>
                 )}
-              </View>
+              </TouchableOpacity>
             </View>
 
             {/* Name & Bio */}
@@ -338,6 +457,9 @@ export default function PerfilScreen() {
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                 <Text style={styles.userName}>{displayName}</Text>
                 {profile?.is_verified && <VerifiedBadge size={18} />}
+                {isNumberOne && <RankOneBadge />}
+                {isNumberTwo && <RankTwoBadge />}
+                {isNumberThree && <RankThreeBadge />}
               </View>
               <Text style={styles.userBio} numberOfLines={2}>{bio}</Text>
 
@@ -346,6 +468,7 @@ export default function PerfilScreen() {
                 <FireIcon />
                 <Text style={styles.streakText}>{streakDays} dias de streak</Text>
               </View>
+              {session?.user?.id && <UserRankBadge userId={session.user.id} />}
             </View>
           </View>
 
@@ -408,7 +531,13 @@ export default function PerfilScreen() {
           return (
             <TouchableOpacity
               key={tab}
-              onPress={() => setActiveTab(tab)}
+              onPress={() => {
+                try { Haptics?.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch {}
+                setActiveTab(tab);
+                if (tab === 'corridas' && strava.hasNewRuns) {
+                  setShowSparkClaim(true);
+                }
+              }}
               activeOpacity={0.7}
               style={[styles.tabBtn, isActive && styles.tabBtnActive]}
             >
@@ -418,7 +547,12 @@ export default function PerfilScreen() {
                   style={StyleSheet.absoluteFill}
                 />
               )}
-              {tab === 'corridas' && <SparkIcon size={13} color={isActive ? '#FF8540' : 'rgba(255,255,255,0.3)'} />}
+              {tab === 'corridas' && (
+                <SparkIcon size={13} color={isActive ? '#FF8540' : 'rgba(255,255,255,0.3)'} />
+              )}
+              {tab === 'corridas' && strava.hasNewRuns && (
+                <View style={{ position: 'absolute', top: 2, right: 0, width: 10, height: 10, borderRadius: 5, backgroundColor: '#FF6C24', borderWidth: 2, borderColor: 'rgba(13,13,13,0.9)', zIndex: 20 }} />
+              )}
               {tab === 'records' && (
                 <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={isActive ? '#FF8540' : 'rgba(255,255,255,0.3)'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <Path d="M6 9a6 6 0 0 1 12 0c0 3-2 5.5-6 9-4-3.5-6-6-6-9z" />
@@ -628,7 +762,7 @@ export default function PerfilScreen() {
             <GlassCard style={styles.statsCard}>
               {/* Title */}
               <View style={styles.statsTitleRow}>
-                <LottieView source={HIKER_ANIM} autoPlay={true} loop={true} speed={0.8} style={{ width: 28, height: 28 }} renderMode="AUTOMATIC" />
+                <LottieView source={HIKER_ANIM} autoPlay={true} loop={true} speed={0.8} style={{ width: 40, height: 40 }} renderMode="AUTOMATIC" />
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={styles.statsTitle}>Sua Jornada</Text>
@@ -717,38 +851,127 @@ export default function PerfilScreen() {
 
             </GlassCard>
           </Animated.View>
+
         </>
       )}
 
-      {/* ── Quick Actions ── */}
-      <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.actionsRow}>
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/(tabs)/editar-perfil' as any)}>
-          <GlassCard style={styles.actionCard}>
-            <EditIcon />
-            <Text style={styles.actionText}>Editar Perfil</Text>
-          </GlassCard>
-        </TouchableOpacity>
+      {/* VITTA AI Coach — desativado por enquanto */}
 
-        <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/social/search' as any)}>
-          <GlassCard style={styles.actionCard}>
-            <UsersIcon />
-            <Text style={styles.actionText}>Encontrar Parceiros</Text>
-          </GlassCard>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* ── Logout ── */}
-      <Animated.View entering={FadeInDown.delay(250).duration(500)}>
-        <TouchableOpacity activeOpacity={0.7} style={styles.logoutBtn} onPress={handleLogout}>
-          <LogOutIcon />
-          <Text style={styles.logoutText}>Sair da conta</Text>
-        </TouchableOpacity>
-      </Animated.View>
       </>
       )}
+
     </ScrollView>
+
+    {/* ── Settings Sheet ── */}
+    {showSettings && (
+      <TouchableOpacity
+        activeOpacity={1}
+        style={styles.settingsOverlay}
+        onPress={() => setShowSettings(false)}
+      >
+          <View style={styles.settingsSheet} onStartShouldSetResponder={() => true}>
+            {!isWeb && <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />}
+            <View style={styles.settingsHandle} />
+            <Text style={styles.settingsTitle}>Configurações</Text>
+
+            {/* Editar Perfil */}
+            <TouchableOpacity style={styles.settingsRow} activeOpacity={0.7} onPress={() => { setShowSettings(false); router.push('/(tabs)/editar-perfil' as any); }}>
+              <EditIcon />
+              <Text style={styles.settingsRowText}>Editar Perfil</Text>
+              <ChevronIcon />
+            </TouchableOpacity>
+
+            {/* Perfil Privado */}
+            <TouchableOpacity style={styles.settingsRow} activeOpacity={0.7} onPress={handleTogglePrivacy}>
+              <LockIcon />
+              <Text style={styles.settingsRowText}>Perfil Privado</Text>
+              <View style={[styles.settingsToggle, profile?.is_private && styles.settingsToggleOn]}>
+                <View style={[styles.settingsToggleDot, profile?.is_private && styles.settingsToggleDotOn]} />
+              </View>
+            </TouchableOpacity>
+
+            {/* Notificações */}
+            <TouchableOpacity style={styles.settingsRow} activeOpacity={0.7} onPress={handleToggleNotifications}>
+              <BellIcon />
+              <Text style={styles.settingsRowText}>Notificações</Text>
+              <View style={[styles.settingsToggle, notificationsOn && styles.settingsToggleOn]}>
+                <View style={[styles.settingsToggleDot, notificationsOn && styles.settingsToggleDotOn]} />
+              </View>
+            </TouchableOpacity>
+
+            {/* Encontrar Parceiros */}
+            <TouchableOpacity style={styles.settingsRow} activeOpacity={0.7} onPress={() => { setShowSettings(false); router.push('/social/search' as any); }}>
+              <UsersIcon />
+              <Text style={styles.settingsRowText}>Encontrar Parceiros</Text>
+              <ChevronIcon />
+            </TouchableOpacity>
+
+            {/* Tema Glass */}
+            <TouchableOpacity style={styles.settingsRow} activeOpacity={0.7} onPress={toggleGlassTheme}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Circle cx="12" cy="12" r="5" />
+                <Path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </Svg>
+              <Text style={styles.settingsRowText}>Tema Glass</Text>
+              <Text style={{ fontFamily: 'Montserrat_500Medium', fontSize: 12, color: 'rgba(255,108,36,0.6)' }}>
+                {glassTheme === 'dark' ? 'Escuro' : 'Claro'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.settingsDivider} />
+
+            {/* Sair */}
+            <TouchableOpacity style={styles.settingsRow} activeOpacity={0.7} onPress={handleLogout}>
+              <LogOutIcon />
+              <Text style={[styles.settingsRowText, { color: 'rgba(239,68,68,0.7)' }]}>Sair da conta</Text>
+            </TouchableOpacity>
+
+            {/* Excluir Conta */}
+            <TouchableOpacity style={styles.settingsRow} activeOpacity={0.7} onPress={handleDeleteAccount}>
+              <TrashIcon />
+              <Text style={[styles.settingsRowText, { color: 'rgba(239,68,68,0.5)' }]}>Excluir minha conta</Text>
+            </TouchableOpacity>
+          </View>
+      </TouchableOpacity>
+    )}
+
+    {/* Spark Claim Modal */}
+    <SparkClaimModal
+      visible={showSparkClaim}
+      sparksCount={strava.unclaimedSparks}
+      runsCount={strava.newRunsCount}
+      onClaim={() => {
+        setShowSparkClaim(false);
+        if (session?.user?.id) strava.claimNewRuns(session.user.id);
+      }}
+    />
+
+    {/* Avatar Fullscreen Modal */}
+    {showAvatarModal && profile?.avatar_url && (
+      <Animated.View entering={FadeIn.duration(250)} style={styles.avatarModalOverlay}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAvatarModal(false)} />
+        {!isWeb && <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />}
+        <TouchableOpacity style={styles.avatarModalClose} activeOpacity={0.7} onPress={() => setShowAvatarModal(false)}>
+          <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M18 6L6 18M6 6l12 12" />
+          </Svg>
+        </TouchableOpacity>
+        <Animated.View entering={FadeIn.delay(100).duration(300)} style={styles.avatarModalImageWrap}>
+          <View style={styles.avatarModalRing}>
+            <LinearGradient colors={['#FF6C24', '#FF8540', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+          </View>
+          <Image source={{ uri: profile.avatar_url }} style={styles.avatarModalImage} />
+        </Animated.View>
+        <Animated.View entering={FadeIn.delay(200).duration(300)}>
+          <Text style={styles.avatarModalName}>{profile.name}</Text>
+        </Animated.View>
+      </Animated.View>
+    )}
+  </>
   );
 }
+
+const AVATAR_MODAL_SIZE = Math.min(Dimensions.get('window').width * 0.65, 280);
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
@@ -954,6 +1177,50 @@ const styles = StyleSheet.create({
   },
   logoutText: { fontFamily: 'Montserrat_500Medium', color: 'rgba(239,68,68,0.7)', fontSize: 14 },
 
+  // Settings Sheet
+  settingsOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end', zIndex: 100,
+  } as any,
+  settingsSheet: {
+    backgroundColor: isWeb ? '#1a1a1a' : 'transparent',
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    overflow: 'hidden', paddingBottom: 40, paddingTop: 12,
+  } as any,
+  settingsHandle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignSelf: 'center', marginBottom: 16,
+  } as any,
+  settingsTitle: {
+    fontFamily: 'Montserrat_700Bold', fontSize: 16, color: '#fff',
+    paddingHorizontal: 20, marginBottom: 12,
+  },
+  settingsRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingHorizontal: 20, paddingVertical: 14, minHeight: 48,
+  } as any,
+  settingsRowText: {
+    fontFamily: 'Montserrat_500Medium', fontSize: 15, color: 'rgba(255,255,255,0.8)', flex: 1,
+  },
+  settingsDivider: {
+    height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginHorizontal: 20, marginVertical: 4,
+  } as any,
+  settingsToggle: {
+    width: 44, height: 26, borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center', paddingHorizontal: 3,
+  } as any,
+  settingsToggleOn: {
+    backgroundColor: '#FF6C24',
+  },
+  settingsToggleDot: {
+    width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff',
+  } as any,
+  settingsToggleDotOn: {
+    alignSelf: 'flex-end',
+  } as any,
+
   // Mini share button next to title
   miniShareBtn: {
     width: 28, height: 28, borderRadius: 14,
@@ -974,4 +1241,23 @@ const styles = StyleSheet.create({
   tabBtnActive: { borderColor: 'rgba(255,108,36,0.25)' },
   tabBtnText: { fontFamily: 'Montserrat_600SemiBold', color: 'rgba(255,255,255,0.3)', fontSize: 13 },
   tabBtnTextActive: { color: '#FF8540' },
+
+  coachCard: {
+    borderRadius: 20, overflow: 'hidden', marginTop: 16, padding: 18,
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.15)',
+  } as any,
+  coachIconWrap: {
+    width: 52, height: 52, borderRadius: 16,
+    backgroundColor: 'rgba(255,108,36,0.1)',
+    borderWidth: 0.5, borderColor: 'rgba(255,108,36,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 14,
+  } as any,
+
+  avatarModalOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: isWeb ? 'rgba(0,0,0,0.85)' : 'transparent' },
+  avatarModalClose: { position: 'absolute', top: 60, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center', zIndex: 10 },
+  avatarModalImageWrap: { width: AVATAR_MODAL_SIZE + 6, height: AVATAR_MODAL_SIZE + 6, borderRadius: (AVATAR_MODAL_SIZE + 6) / 2, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  avatarModalRing: { ...StyleSheet.absoluteFillObject, borderRadius: (AVATAR_MODAL_SIZE + 6) / 2, overflow: 'hidden' },
+  avatarModalImage: { width: AVATAR_MODAL_SIZE, height: AVATAR_MODAL_SIZE, borderRadius: AVATAR_MODAL_SIZE / 2, borderWidth: 3, borderColor: '#0D0D0D' },
+  avatarModalName: { fontFamily: 'Montserrat_600SemiBold', fontSize: 18, color: '#fff', textAlign: 'center' },
 });

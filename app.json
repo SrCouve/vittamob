@@ -2,7 +2,7 @@
   "expo": {
     "name": "VITTA UP",
     "slug": "vittaup",
-    "version": "2.0.0",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "fit.vittaup.app",
-      "buildNumber": "78",
+      "buildNumber": "105",
       "usesAppleSignIn": true,
       "backgroundColor": "#0D0D0D",
       "config": {
@@ -74,7 +74,8 @@
         }
       ],
       "expo-sharing",
-      "expo-sqlite"
+      "expo-sqlite",
+      "./plugins/withWatchApp"
     ],
     "extra": {
       "router": {},

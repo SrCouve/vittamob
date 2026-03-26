@@ -1,9 +1,10 @@
 import React, { useEffect, useCallback, useMemo, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Image, Alert, ActionSheetIOS, Platform, ActivityIndicator,
+  Alert, ActionSheetIOS, Platform, ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,10 @@ import LottieView from 'lottie-react-native';
 import { GlassCard } from '../../src/components/GlassCard';
 import { FollowButton } from '../../src/components/FollowButton';
 import { VerifiedBadge } from '../../src/components/VerifiedBadge';
+import { RankOneBadge, RankTwoBadge, RankThreeBadge } from '../../src/components/RankOneBadge';
+import { UserRankBadge } from '../../src/components/UserRankBadge';
+import { ElectricBorder } from '../../src/components/ElectricBorder';
+import { useCommunityStore } from '../../src/stores/communityStore';
 import { useAuthStore } from '../../src/stores/authStore';
 import { useSocialStore } from '../../src/stores/socialStore';
 import {
@@ -276,6 +281,13 @@ export default function PublicProfileScreen() {
   } = useSocialStore();
 
   const [activeTab, setActiveTab] = useState<ProfileTab>('perfil');
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+
+  // Check rank position
+  const topMembers = useCommunityStore((s) => s.topMembers);
+  const isNumberOne = topMembers.length > 0 && topMembers[0].user_id === id;
+  const isNumberTwo = topMembers.length > 1 && topMembers[1].user_id === id;
+  const isNumberThree = topMembers.length > 2 && topMembers[2].user_id === id;
 
   // Friends count for target user
   const [targetFriendsCount, setTargetFriendsCount] = useState(0);
@@ -940,6 +952,9 @@ export default function PublicProfileScreen() {
             {isLoadingProfile ? '' : displayName}
           </Text>
           {profile?.is_verified && <VerifiedBadge size={16} />}
+          {isNumberOne && <RankOneBadge />}
+          {isNumberTwo && <RankTwoBadge />}
+          {isNumberThree && <RankThreeBadge />}
         </View>
 
         <TouchableOpacity
@@ -1011,6 +1026,7 @@ export default function PublicProfileScreen() {
                     </Animated.View>
 
                     {/* Avatar always visible */}
+                    {isNumberOne && <ElectricBorder borderRadius={42} width={84} height={84} intense />}
                     <View style={styles.avatarRing}>
                       <LinearGradient
                         colors={['#FF6C24', '#FF8540', '#FFAC7D']}
@@ -1019,7 +1035,7 @@ export default function PublicProfileScreen() {
                         end={{ x: 1, y: 1 }}
                       />
                     </View>
-                    <View style={styles.avatarInner}>
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => profile.avatar_url && setShowAvatarModal(true)} style={styles.avatarInner}>
                       {profile.avatar_url ? (
                         <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} />
                       ) : (
@@ -1028,7 +1044,7 @@ export default function PublicProfileScreen() {
                           <Text style={styles.avatarText}>{initial}</Text>
                         </>
                       )}
-                    </View>
+                    </TouchableOpacity>
                   </View>
 
                   {/* Name & Bio */}
@@ -1036,6 +1052,9 @@ export default function PublicProfileScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
                       <Text style={styles.userName}>{displayName}</Text>
                       {profile?.is_verified && <VerifiedBadge size={18} />}
+                      {isNumberOne && <RankOneBadge />}
+                      {isNumberTwo && <RankTwoBadge />}
+                      {isNumberThree && <RankThreeBadge />}
                     </View>
                     {profile.bio ? (
                       <Text style={styles.userBio} numberOfLines={3}>{profile.bio}</Text>
@@ -1048,6 +1067,7 @@ export default function PublicProfileScreen() {
                         <Text style={styles.streakText}>{streakDays} dias de streak</Text>
                       </View>
                     )}
+                    {id && <UserRankBadge userId={id} />}
                   </View>
                 </View>
 
@@ -1384,7 +1404,7 @@ export default function PublicProfileScreen() {
                         <Animated.View entering={FadeInDown.delay(200).duration(500)}>
                           <GlassCard style={styles.statsCard}>
                             <View style={styles.statsTitleRow}>
-                              <LottieView source={HIKER_ANIM} autoPlay={true} loop={true} speed={0.8} style={{ width: 28, height: 28 }} renderMode="AUTOMATIC" />
+                              <LottieView source={HIKER_ANIM} autoPlay={true} loop={true} speed={0.8} style={{ width: 40, height: 40 }} renderMode="AUTOMATIC" />
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.statsTitle}>Jornada</Text>
                                 <Text style={styles.statsSubtitle}>historico lifetime</Text>
@@ -1471,9 +1491,39 @@ export default function PublicProfileScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Avatar Fullscreen Modal */}
+      {showAvatarModal && profile?.avatar_url && (
+        <Animated.View entering={FadeIn.duration(250)} style={styles.avatarModalOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setShowAvatarModal(false)} />
+          {!isWeb && <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />}
+
+          {/* Close button */}
+          <TouchableOpacity style={styles.avatarModalClose} activeOpacity={0.7} onPress={() => setShowAvatarModal(false)}>
+            <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <Path d="M18 6L6 18M6 6l12 12" />
+            </Svg>
+          </TouchableOpacity>
+
+          {/* Avatar large circle */}
+          <Animated.View entering={FadeIn.delay(100).duration(300)} style={styles.avatarModalImageWrap}>
+            <View style={styles.avatarModalRing}>
+              <LinearGradient colors={['#FF6C24', '#FF8540', '#FFAC7D']} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
+            </View>
+            <Image source={{ uri: profile.avatar_url }} style={styles.avatarModalImage} />
+          </Animated.View>
+
+          {/* Name */}
+          <Animated.View entering={FadeIn.delay(200).duration(300)}>
+            <Text style={styles.avatarModalName}>{profile.name}</Text>
+          </Animated.View>
+        </Animated.View>
+      )}
     </View>
   );
 }
+
+const AVATAR_MODAL_SIZE = Math.min(Dimensions.get('window').width * 0.65, 280);
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -1775,5 +1825,54 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.8,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
+  },
+
+  // Avatar fullscreen modal
+  avatarModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Platform.OS === 'web' ? 'rgba(0,0,0,0.85)' : 'transparent',
+  },
+  avatarModalClose: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
+  avatarModalImageWrap: {
+    width: AVATAR_MODAL_SIZE + 6,
+    height: AVATAR_MODAL_SIZE + 6,
+    borderRadius: (AVATAR_MODAL_SIZE + 6) / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  avatarModalRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: (AVATAR_MODAL_SIZE + 6) / 2,
+    overflow: 'hidden',
+  },
+  avatarModalImage: {
+    width: AVATAR_MODAL_SIZE,
+    height: AVATAR_MODAL_SIZE,
+    borderRadius: AVATAR_MODAL_SIZE / 2,
+    borderWidth: 3,
+    borderColor: '#0D0D0D',
+  },
+  avatarModalName: {
+    fontFamily: 'Montserrat_600SemiBold',
+    fontSize: 18,
+    color: '#fff',
+    textAlign: 'center',
   },
 });

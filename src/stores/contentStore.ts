@@ -39,6 +39,7 @@ interface ContentState {
   fetchLessons: (moduleId: string) => Promise<void>;
   fetchProgress: (userId: string) => Promise<void>;
   updateProgress: (userId: string, lessonId: string, watchSeconds: number, completed: boolean) => Promise<void>;
+  reset: () => void;
 
   // Computed
   getModuleProgress: (moduleId: string) => number;
@@ -51,6 +52,8 @@ export const useContentStore = create<ContentState>((set, get) => ({
   lessons: {},
   progress: {},
   isLoading: false,
+
+  reset: () => set({ modules: [], lessons: {}, progress: {}, isLoading: false }),
 
   fetchModules: async () => {
     set({ isLoading: true });
